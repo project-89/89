@@ -1,0 +1,82 @@
+{
+  "version": "6.0",
+  "nxVersion": "20.6.2",
+  "pathMappings": {},
+  "nxJsonPlugins": [],
+  "fileMap": {
+    "nonProjectFiles": [],
+    "projectFileMap": {
+      "89": [
+        {
+          "file": ".eslintrc.json",
+          "hash": "15851008534228665219"
+        },
+        {
+          "file": ".gitignore",
+          "hash": "3675717733769105872"
+        },
+        {
+          "file": ".prettierignore",
+          "hash": "15821603010667693695"
+        },
+        {
+          "file": ".prettierrc",
+          "hash": "2868669979708846622"
+        },
+        {
+          "file": "LICENSE",
+          "hash": "11230202449786133348"
+        },
+        {
+          "file": "README.md",
+          "hash": "12816910560525752879"
+        },
+        {
+          "file": "apps/README.md",
+          "hash": "14043446392106760022"
+        },
+        {
+          "file": "jest.preset.js",
+          "hash": "2599607768644681757"
+        },
+        {
+          "file": "libs/README.md",
+          "hash": "8065675919918166548"
+        },
+        {
+          "file": "nx.json",
+          "hash": "14882177736347105947"
+        },
+        {
+          "file": "package-lock.json",
+          "hash": "769029913606557082"
+        },
+        {
+          "file": "package.json",
+          "hash": "13736525464170460827",
+          "deps": [
+            "npm:@nx/js",
+            "npm:@nx/workspace",
+            "npm:nx",
+            "npm:prettier",
+            "npm:prettier-plugin-organize-imports",
+            "npm:ts-node",
+            "npm:typescript"
+          ]
+        },
+        {
+          "file": "tools/README.md",
+          "hash": "4105388634849755151"
+        },
+        {
+          "file": "tsconfig.base.json",
+          "hash": "17388991015278659392"
+        },
+        {
+          "file": "workspace.json",
+          "hash": "614667746188477152"
+        }
+      ]
+    }
+  }
+}
