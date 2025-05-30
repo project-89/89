@@ -1,17 +1,21 @@
-import { Request, Response, NextFunction } from "express";
-import { getFirestore } from "firebase-admin/firestore";
-import { COLLECTIONS } from "../constants";
-import { ApiError } from "../utils";
-import { ERROR_MESSAGES } from "../constants";
+import { NextFunction, Request, Response } from 'express';
+import { COLLECTIONS, ERROR_MESSAGES } from '../constants';
+import '../types/express'; // Load Request interface extension
+import { ApiError } from '../utils';
+import { getDb } from '../utils/mongodb';
 
 /**
  * Middleware to verify fingerprint exists for write operations
  * Does not check ownership, only existence
  */
-export const verifyFingerprintExists = async (req: Request, res: Response, next: NextFunction) => {
+export const verifyFingerprintExists = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     // Skip OPTIONS requests
-    if (req.method === "OPTIONS") {
+    if (req.method === 'OPTIONS') {
       return next();
     }
 
@@ -27,18 +31,21 @@ export const verifyFingerprintExists = async (req: Request, res: Response, next:
     }
 
     // Check if fingerprint exists
-    const db = getFirestore();
-    const fingerprintDoc = await db.collection(COLLECTIONS.FINGERPRINTS).doc(fingerprintId).get();
+    const db = await getDb();
+    const fingerprintDoc = await db
+      .collection(COLLECTIONS.FINGERPRINTS)
+      .findOne({ id: fingerprintId });
 
-    if (!fingerprintDoc.exists) {
+    if (!fingerprintDoc) {
       throw new ApiError(404, ERROR_MESSAGES.FINGERPRINT_NOT_FOUND);
     }
 
     // Set fingerprintId on request for use in route handlers
     req.auth = {
+      ...req.auth,
       fingerprint: {
         id: fingerprintId,
-        roles: fingerprintDoc.data()?.roles || [],
+        roles: fingerprintDoc.roles || [],
       },
     };
     next();

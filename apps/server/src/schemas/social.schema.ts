@@ -1,13 +1,23 @@
-import { z } from "zod";
-import { Timestamp } from "firebase-admin/firestore";
+import { z } from 'zod';
 
-import { TagDataSchema, TagLimitDataSchema, TimestampSchema } from ".";
+import { TimestampSchema } from '.';
+import { TagDataSchema, TagLimitDataSchema } from './tag.schema';
 
 // Base schemas
-export const SocialPlatformSchema = z.literal("x");
+export const SocialPlatformSchema = z.literal('x');
 
-export const ActionSchema = z.enum(["tagging", "being_tagged", "onboarding_verification"]);
-export const StatusSchema = z.enum(["active", "inactive", "verified", "claimed", "banned"]);
+export const ActionSchema = z.enum([
+  'tagging',
+  'being_tagged',
+  'onboarding_verification',
+]);
+export const StatusSchema = z.enum([
+  'active',
+  'inactive',
+  'verified',
+  'claimed',
+  'banned',
+]);
 
 export const SocialIdentitySchema = z.object({
   platform: SocialPlatformSchema,
@@ -49,13 +59,13 @@ export const CreateAnonUserDataSchema = z.object({
   usernameSalt: z.string(),
   discoveryInfo: DiscoveryInfoSchema,
   initialTagLimits: z.boolean(),
-  now: z.instanceof(Timestamp),
+  now: z.date(),
 });
 
 export const CreateDiscoveryUpdateSchema = z.object({
   platform: SocialPlatformSchema,
   discoveryInfo: DiscoveryInfoSchema,
-  now: z.instanceof(Timestamp),
+  now: z.date(),
 });
 
 // Database operation parameter schemas
@@ -76,7 +86,7 @@ export const CreateAnonUserSchema = z.object({
 });
 
 export const UpdateAnonUserDiscoverySchema = z.object({
-  docRef: z.custom<FirebaseFirestore.DocumentReference>(),
+  docRef: z.any(),
   platform: SocialPlatformSchema,
   discoveryInfo: DiscoveryInfoSchema,
 });
@@ -186,18 +196,28 @@ export type CreateDiscoveryUpdate = z.infer<typeof CreateDiscoveryUpdateSchema>;
 
 // Export database operation parameter types
 export type FindAnonUserParams = z.infer<typeof FindAnonUserParamsSchema>;
-export type FindAnonUserByUsername = z.infer<typeof FindAnonUserByUsernameSchema>;
+export type FindAnonUserByUsername = z.infer<
+  typeof FindAnonUserByUsernameSchema
+>;
 export type CreateAnonUser = z.infer<typeof CreateAnonUserSchema>;
-export type UpdateAnonUserDiscovery = z.infer<typeof UpdateAnonUserDiscoverySchema>;
+export type UpdateAnonUserDiscovery = z.infer<
+  typeof UpdateAnonUserDiscoverySchema
+>;
 export type HandleSocialUser = z.infer<typeof HandleSocialUserSchema>;
 export type UpdateStatusParams = z.infer<typeof UpdateStatusParamsSchema>;
 export type LinkParams = z.infer<typeof LinkParamsSchema>;
 
 // Export request types
 export type FindAnonUserRequest = z.infer<typeof FindAnonUserRequestSchema>;
-export type FindAnonUserByUsernameRequest = z.infer<typeof FindAnonUserByUsernameRequestSchema>;
+export type FindAnonUserByUsernameRequest = z.infer<
+  typeof FindAnonUserByUsernameRequestSchema
+>;
 export type CreateAnonUserRequest = z.infer<typeof CreateAnonUserRequestSchema>;
-export type UpdateAnonUserDiscoveryRequest = z.infer<typeof UpdateAnonUserDiscoveryRequestSchema>;
-export type HandleSocialUserRequest = z.infer<typeof HandleSocialUserRequestSchema>;
+export type UpdateAnonUserDiscoveryRequest = z.infer<
+  typeof UpdateAnonUserDiscoveryRequestSchema
+>;
+export type HandleSocialUserRequest = z.infer<
+  typeof HandleSocialUserRequestSchema
+>;
 export type UpdateStatusRequest = z.infer<typeof UpdateStatusRequestSchema>;
 export type LinkRequest = z.infer<typeof LinkRequestSchema>;

@@ -1,42 +1,37 @@
-import { randomBytes, createCipheriv, createDecipheriv } from "crypto";
-import * as functions from "firebase-functions";
+import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 
-// Use Firebase Functions config for encryption keys
+// Use environment variables for encryption keys
 const getEncryptionKey = () => {
-  // Use test environment variables if in test mode
-  if (process.env.NODE_ENV === "test") {
-    const key = process.env.FIREBASE_CONFIG_ENCRYPTION_API_KEY || "";
-    console.log("Using test encryption key (base64):", key);
-    const buffer = Buffer.from(key, "base64");
-    console.log("Test encryption key (buffer length):", buffer.length);
-    return buffer;
+  const key =
+    process.env.ENCRYPTION_API_KEY ||
+    process.env.FIREBASE_CONFIG_ENCRYPTION_API_KEY ||
+    '';
+  if (!key) {
+    throw new Error('ENCRYPTION_API_KEY environment variable is required');
   }
-
-  // Use Firebase Functions config in production
-  const config = functions.config();
-  const key = config.encryption?.api_key || "";
-  console.log("Encryption key (base64):", key);
-  const buffer = Buffer.from(key, "base64");
-  console.log("Encryption key (buffer length):", buffer.length);
+  const buffer = Buffer.from(key, 'base64');
+  if (buffer.length !== 32) {
+    throw new Error(
+      'ENCRYPTION_API_KEY must be a 32-byte base64 encoded string'
+    );
+  }
   return buffer;
 };
 
 const getEncryptionIv = () => {
-  // Use test environment variables if in test mode
-  if (process.env.NODE_ENV === "test") {
-    const iv = process.env.FIREBASE_CONFIG_ENCRYPTION_API_IV || "";
-    console.log("Using test encryption IV (base64):", iv);
-    const buffer = Buffer.from(iv, "base64");
-    console.log("Test encryption IV (buffer length):", buffer.length);
-    return buffer;
+  const iv =
+    process.env.ENCRYPTION_API_IV ||
+    process.env.FIREBASE_CONFIG_ENCRYPTION_API_IV ||
+    '';
+  if (!iv) {
+    throw new Error('ENCRYPTION_API_IV environment variable is required');
   }
-
-  // Use Firebase Functions config in production
-  const config = functions.config();
-  const iv = config.encryption?.api_iv || "";
-  console.log("Encryption IV (base64):", iv);
-  const buffer = Buffer.from(iv, "base64");
-  console.log("Encryption IV (buffer length):", buffer.length);
+  const buffer = Buffer.from(iv, 'base64');
+  if (buffer.length !== 16) {
+    throw new Error(
+      'ENCRYPTION_API_IV must be a 16-byte base64 encoded string'
+    );
+  }
   return buffer;
 };
 
@@ -46,7 +41,7 @@ const getEncryptionIv = () => {
  */
 export const generateApiKey = (): string => {
   const bytes = randomBytes(32);
-  return bytes.toString("base64").replace(/[+/=]/g, "");
+  return bytes.toString('base64').replace(/[+/=]/g, '');
 };
 
 /**
@@ -55,9 +50,13 @@ export const generateApiKey = (): string => {
  * @returns Encrypted API key safe for client storage
  */
 export const encryptApiKey = (apiKey: string): string => {
-  const cipher = createCipheriv("aes-256-cbc", getEncryptionKey(), getEncryptionIv());
-  let encrypted = cipher.update(apiKey, "utf8", "base64");
-  encrypted += cipher.final("base64");
+  const cipher = createCipheriv(
+    'aes-256-cbc',
+    getEncryptionKey(),
+    getEncryptionIv()
+  );
+  let encrypted = cipher.update(apiKey, 'utf8', 'base64');
+  encrypted += cipher.final('base64');
   return encrypted;
 };
 
@@ -67,9 +66,13 @@ export const encryptApiKey = (apiKey: string): string => {
  * @returns Original API key
  */
 export const decryptApiKey = (encryptedKey: string): string => {
-  const decipher = createDecipheriv("aes-256-cbc", getEncryptionKey(), getEncryptionIv());
-  let decrypted = decipher.update(encryptedKey, "base64", "utf8");
-  decrypted += decipher.final("utf8");
+  const decipher = createDecipheriv(
+    'aes-256-cbc',
+    getEncryptionKey(),
+    getEncryptionIv()
+  );
+  let decrypted = decipher.update(encryptedKey, 'base64', 'utf8');
+  decrypted += decipher.final('utf8');
   return decrypted;
 };
 
@@ -79,6 +82,6 @@ export const decryptApiKey = (encryptedKey: string): string => {
  * @returns boolean indicating if the key format is valid
  */
 export const isValidApiKeyFormat = (key: string): boolean => {
-  if (!key || typeof key !== "string") return false;
+  if (!key || typeof key !== 'string') return false;
   return /^[A-Za-z0-9\-_]{32,}$/.test(key);
 };

@@ -1,39 +1,56 @@
-import { getFirestore } from "firebase-admin/firestore";
-import { getCurrentUnixMillis } from "../utils";
-import { CACHE_DURATION } from "../constants";
+import { CACHE_DURATION } from '../constants';
+import { getCurrentUnixMillis } from '../utils';
+import { getDb } from '../utils/mongodb';
 
-export const getCachedData = async <T>(key: string, collection: string): Promise<T | null> => {
+export const getCachedData = async <T>(
+  key: string,
+  collection: string
+): Promise<T | null> => {
   try {
-    const db = getFirestore();
-    const doc = await db.collection(collection).doc(key).get();
+    const db = await getDb();
+    const cacheCollection = `cache_${collection}`;
 
-    if (!doc.exists) {
+    const doc = await db.collection(cacheCollection).findOne({ key: key });
+
+    if (!doc) {
       return null;
     }
 
-    const data = doc.data();
-    if (!data || getCurrentUnixMillis() - data.timestamp > CACHE_DURATION.PRICE) {
+    // Check if cache is expired
+    if (getCurrentUnixMillis() - doc.timestamp > CACHE_DURATION.PRICE) {
+      // Remove expired cache entry
+      await db.collection(cacheCollection).deleteOne({ key: key });
       return null;
     }
 
+    // Remove MongoDB-specific fields and return cached data
+    const { _id, key: cacheKey, timestamp, ...data } = doc;
     return data as T;
   } catch (error) {
-    console.error("Error getting cached data:", error);
+    console.error('Error getting cached data:', error);
     return null;
   }
 };
 
-export const setCachedData = async <T>(key: string, collection: string, data: T): Promise<void> => {
+export const setCachedData = async <T>(
+  key: string,
+  collection: string,
+  data: T
+): Promise<void> => {
   try {
-    const db = getFirestore();
-    await db
-      .collection(collection)
-      .doc(key)
-      .set({
+    const db = await getDb();
+    const cacheCollection = `cache_${collection}`;
+
+    await db.collection(cacheCollection).replaceOne(
+      { key: key },
+      {
+        key: key,
         ...data,
         timestamp: getCurrentUnixMillis(),
-      });
+      },
+      { upsert: true }
+    );
   } catch (error) {
-    console.error("Error setting cached data:", error);
+    console.error('Error setting cached data:', error);
   }
 };
