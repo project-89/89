@@ -1,21 +1,19 @@
-import { ApiError } from "../utils";
-import { ERROR_MESSAGES, COLLECTIONS } from "../constants";
-import { skillMatchingService } from ".";
+import { randomUUID } from 'crypto';
+import { skillMatchingService } from '.';
+import { COLLECTIONS, ERROR_MESSAGES } from '../constants';
 import {
-  Skill,
+  CapabilityWithSkill,
+  CreateCapabilityInput,
   ProfileCapability,
   ProfileCapabilityModel,
-  CreateCapabilityInput,
-  UpdateCapabilityInput,
+  Skill,
   SkillLevel,
-  CapabilityWithSkill,
-} from "../schemas";
-import { getDb, formatDocument, formatDocuments } from "../utils/mongodb";
-import { startMongoSession, withTransaction } from "../utils/mongo-session";
-import { idFilter, stringIdFilter } from "../utils/mongo-filters";
-import { ObjectId } from "mongodb";
-
-const LOG_PREFIX = "[Capability Service]";
+  UpdateCapabilityInput,
+} from '../schemas';
+import { ApiError } from '../utils';
+import { withTransaction } from '../utils/mongo-session';
+import { formatDocuments, getDb } from '../utils/mongodb';
+const LOG_PREFIX = '[Capability Service]';
 
 export const createCapability = async ({
   profileId,
@@ -43,7 +41,9 @@ export const createCapability = async ({
     const db = await getDb();
 
     // Check if profile exists
-    const profile = await db.collection(COLLECTIONS.PROFILES).findOne({ id: profileId });
+    const profile = await db
+      .collection(COLLECTIONS.PROFILES)
+      .findOne({ id: profileId });
     if (!profile) {
       throw ApiError.from(null, 404, ERROR_MESSAGES.PROFILE_NOT_FOUND);
     }
@@ -55,7 +55,7 @@ export const createCapability = async ({
 
     // Analyze skill and find similar skills
     const analysis = await skillMatchingService.analyzeSkill({
-      description: `${input.name}${input.description ? ` - ${input.description}` : ""}`,
+      description: `${input.name}${input.description ? ` - ${input.description}` : ''}`,
     });
 
     // Use suggested type and category from analysis if not provided
@@ -77,7 +77,7 @@ export const createCapability = async ({
     if (!existingSkill) {
       // Create new skill
       const skill: Skill = {
-        id: crypto.randomUUID(),
+        id: randomUUID(),
         name: input.name,
         type,
         category,
@@ -100,15 +100,17 @@ export const createCapability = async ({
         {
           $inc: { useCount: 1 },
           $set: { updatedAt: now },
-        },
+        }
       );
     }
 
     // Check if user already has this skill
-    const existingCapability = await db.collection(COLLECTIONS.PROFILE_CAPABILITIES).findOne({
-      profileId,
-      skillId,
-    });
+    const existingCapability = await db
+      .collection(COLLECTIONS.PROFILE_CAPABILITIES)
+      .findOne({
+        profileId,
+        skillId,
+      });
 
     if (existingCapability) {
       throw ApiError.from(null, 400, ERROR_MESSAGES.CAPABILITY_EXISTS);
@@ -116,7 +118,7 @@ export const createCapability = async ({
 
     // Create profile capability
     const capability: ProfileCapabilityModel = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       profileId,
       skillId,
       level: input.level,
@@ -125,14 +127,18 @@ export const createCapability = async ({
       updatedAt: now,
     };
 
-    console.log(`${LOG_PREFIX} Creating new capability:`, { id: capability.id });
+    console.log(`${LOG_PREFIX} Creating new capability:`, {
+      id: capability.id,
+    });
     await db.collection(COLLECTIONS.PROFILE_CAPABILITIES).insertOne(capability);
 
     return {
       ...capability,
       createdAt: capability.createdAt.getTime(),
       updatedAt: capability.updatedAt.getTime(),
-      verifiedAt: capability.verifiedAt ? capability.verifiedAt.getTime() : undefined,
+      verifiedAt: capability.verifiedAt
+        ? capability.verifiedAt.getTime()
+        : undefined,
     };
   } catch (error) {
     console.error(`${LOG_PREFIX} Error:`, {
@@ -168,13 +174,15 @@ export const getCapability = async ({
       throw ApiError.from(null, 403, ERROR_MESSAGES.INSUFFICIENT_PERMISSIONS);
     }
 
-    const skill = await db.collection(COLLECTIONS.SKILLS).findOne({ id: capability.skillId });
+    const skill = await db
+      .collection(COLLECTIONS.SKILLS)
+      .findOne({ id: capability.skillId });
     if (!skill) {
       throw ApiError.from(null, 500, ERROR_MESSAGES.INTERNAL_ERROR);
     }
 
-    // Convert Dates to Unix timestamps (milliseconds)
-    const response: CapabilityWithSkill = {
+    // Format the response with proper typing
+    const result: CapabilityWithSkill = {
       // Capability fields
       id: capability.id,
       profileId: capability.profileId,
@@ -182,14 +190,16 @@ export const getCapability = async ({
       level: capability.level,
       isVerified: capability.isVerified,
       verifierId: capability.verifierId,
-      verifiedAt: capability.verifiedAt ? capability.verifiedAt.getTime() : undefined,
+      verifiedAt: capability.verifiedAt
+        ? capability.verifiedAt.getTime()
+        : undefined,
       // Skill fields
       name: skill.name,
       type: skill.type,
-      category: skill.category || "", // Ensure non-null for schema
+      category: skill.category || '',
       description: skill.description,
-      keywords: skill.keywords || [], // Ensure non-null for schema
-      aliases: skill.aliases || [], // Ensure non-null for schema
+      keywords: skill.keywords || [],
+      aliases: skill.aliases || [],
       parentType: skill.parentType,
       useCount: skill.useCount,
       // Common timestamp fields
@@ -197,7 +207,7 @@ export const getCapability = async ({
       updatedAt: capability.updatedAt.getTime(),
     };
 
-    return response;
+    return result;
   } catch (error) {
     console.error(`${LOG_PREFIX} Error:`, {
       error,
@@ -224,7 +234,9 @@ export const getCapabilities = async ({
       .find({ profileId })
       .toArray();
 
-    console.log(`${LOG_PREFIX} Found capabilities:`, { count: capabilities.length });
+    console.log(`${LOG_PREFIX} Found capabilities:`, {
+      count: capabilities.length,
+    });
 
     if (capabilities.length === 0) {
       return [];
@@ -260,7 +272,9 @@ export const getCapabilities = async ({
         ...skill,
         createdAt: capability.createdAt.getTime(),
         updatedAt: capability.updatedAt.getTime(),
-        verifiedAt: capability.verifiedAt ? capability.verifiedAt.getTime() : undefined,
+        verifiedAt: capability.verifiedAt
+          ? capability.verifiedAt.getTime()
+          : undefined,
       };
     });
 
@@ -286,13 +300,15 @@ export const updateCapability = async ({
   input: UpdateCapabilityInput;
 }): Promise<CapabilityWithSkill> => {
   try {
-    console.log(`${LOG_PREFIX} Starting update:`, { profileId, capabilityId, input });
+    console.log(`${LOG_PREFIX} Starting update:`, {
+      profileId,
+      capabilityId,
+      input,
+    });
     const db = await getDb();
 
     // Use withTransaction pattern instead of manual session management
     return await withTransaction(async (session) => {
-      let result: CapabilityWithSkill;
-
       // Get the capability
       const capability = await db
         .collection(COLLECTIONS.PROFILE_CAPABILITIES)
@@ -307,11 +323,11 @@ export const updateCapability = async ({
       }
 
       // Get the skill
-      const skill = await db
+      const skillData = await db
         .collection(COLLECTIONS.SKILLS)
         .findOne({ id: capability.skillId }, { session });
 
-      if (!skill) {
+      if (!skillData) {
         throw ApiError.from(null, 404, ERROR_MESSAGES.NOT_FOUND);
       }
 
@@ -333,10 +349,6 @@ export const updateCapability = async ({
         updates.description = input.description;
       }
 
-      if (input.showcaseUrl !== undefined) {
-        updates.showcaseUrl = input.showcaseUrl;
-      }
-
       // Update the capability
       await db
         .collection(COLLECTIONS.PROFILE_CAPABILITIES)
@@ -347,15 +359,44 @@ export const updateCapability = async ({
         .collection(COLLECTIONS.PROFILE_CAPABILITIES)
         .findOne({ id: capabilityId }, { session });
 
+      if (!updatedCapability) {
+        throw ApiError.from(null, 404, ERROR_MESSAGES.NOT_FOUND);
+      }
+
+      // Get the skill
+      const updatedSkill = await db
+        .collection(COLLECTIONS.SKILLS)
+        .findOne({ id: updatedCapability.skillId }, { session });
+
+      if (!updatedSkill) {
+        throw ApiError.from(null, 404, ERROR_MESSAGES.NOT_FOUND);
+      }
+
       // Format the response with proper typing
-      result = {
-        ...updatedCapability,
-        createdAt: updatedCapability.createdAt.getTime(),
-        updatedAt: updatedCapability.updatedAt.getTime(),
+      const result: CapabilityWithSkill = {
+        // Capability fields
+        id: updatedCapability.id,
+        profileId: updatedCapability.profileId,
+        skillId: updatedCapability.skillId,
+        level: updatedCapability.level,
+        isVerified: updatedCapability.isVerified,
+        verifierId: updatedCapability.verifierId,
         verifiedAt: updatedCapability.verifiedAt
           ? updatedCapability.verifiedAt.getTime()
           : undefined,
-      } as CapabilityWithSkill;
+        // Skill fields
+        name: updatedSkill.name,
+        type: updatedSkill.type,
+        category: updatedSkill.category || '',
+        description: updatedSkill.description,
+        keywords: updatedSkill.keywords || [],
+        aliases: updatedSkill.aliases || [],
+        parentType: updatedSkill.parentType,
+        useCount: updatedSkill.useCount,
+        // Common timestamp fields
+        createdAt: updatedCapability.createdAt.getTime(),
+        updatedAt: updatedCapability.updatedAt.getTime(),
+      };
 
       return result;
     });
@@ -380,13 +421,14 @@ export const verifyCapability = async ({
   verifierId: string;
 }): Promise<CapabilityWithSkill> => {
   try {
-    console.log(`${LOG_PREFIX} Verifying capability:`, { capabilityId, verifierId });
+    console.log(`${LOG_PREFIX} Verifying capability:`, {
+      capabilityId,
+      verifierId,
+    });
     const db = await getDb();
 
     // Use withTransaction pattern instead of manual session management
     return await withTransaction(async (session) => {
-      let result: CapabilityWithSkill;
-
       // Get the capability
       const capability = await db
         .collection(COLLECTIONS.PROFILE_CAPABILITIES)
@@ -409,12 +451,30 @@ export const verifyCapability = async ({
         }
 
         // Format the response with proper typing
-        const result = {
-          ...capability,
+        const result: CapabilityWithSkill = {
+          // Capability fields
+          id: capability.id,
+          profileId: capability.profileId,
+          skillId: capability.skillId,
+          level: capability.level,
+          isVerified: capability.isVerified,
+          verifierId: capability.verifierId,
+          verifiedAt: capability.verifiedAt
+            ? capability.verifiedAt.getTime()
+            : undefined,
+          // Skill fields
+          name: skill.name,
+          type: skill.type,
+          category: skill.category || '',
+          description: skill.description,
+          keywords: skill.keywords || [],
+          aliases: skill.aliases || [],
+          parentType: skill.parentType,
+          useCount: skill.useCount,
+          // Common timestamp fields
           createdAt: capability.createdAt.getTime(),
           updatedAt: capability.updatedAt.getTime(),
-          verifiedAt: capability.verifiedAt ? capability.verifiedAt.getTime() : undefined,
-        } as CapabilityWithSkill;
+        };
 
         return result;
       }
@@ -430,13 +490,17 @@ export const verifyCapability = async ({
             updatedAt: new Date(),
           },
         },
-        { session },
+        { session }
       );
 
       // Get the updated capability
       const updatedCapability = await db
         .collection(COLLECTIONS.PROFILE_CAPABILITIES)
         .findOne({ id: capabilityId }, { session });
+
+      if (!updatedCapability) {
+        throw ApiError.from(null, 404, ERROR_MESSAGES.NOT_FOUND);
+      }
 
       // Get the skill
       const skill = await db
@@ -448,14 +512,30 @@ export const verifyCapability = async ({
       }
 
       // Format the response with proper typing
-      const result = {
-        ...updatedCapability,
-        createdAt: updatedCapability.createdAt.getTime(),
-        updatedAt: updatedCapability.updatedAt.getTime(),
+      const result: CapabilityWithSkill = {
+        // Capability fields
+        id: updatedCapability.id,
+        profileId: updatedCapability.profileId,
+        skillId: updatedCapability.skillId,
+        level: updatedCapability.level,
+        isVerified: updatedCapability.isVerified,
+        verifierId: updatedCapability.verifierId,
         verifiedAt: updatedCapability.verifiedAt
           ? updatedCapability.verifiedAt.getTime()
           : undefined,
-      } as CapabilityWithSkill;
+        // Skill fields
+        name: skill.name,
+        type: skill.type,
+        category: skill.category || '',
+        description: skill.description,
+        keywords: skill.keywords || [],
+        aliases: skill.aliases || [],
+        parentType: skill.parentType,
+        useCount: skill.useCount,
+        // Common timestamp fields
+        createdAt: updatedCapability.createdAt.getTime(),
+        updatedAt: updatedCapability.updatedAt.getTime(),
+      };
 
       return result;
     });
@@ -479,7 +559,10 @@ export const deleteCapability = async ({
   capabilityId: string;
 }): Promise<void> => {
   try {
-    console.log(`${LOG_PREFIX} Deleting capability:`, { profileId, capabilityId });
+    console.log(`${LOG_PREFIX} Deleting capability:`, {
+      profileId,
+      capabilityId,
+    });
     const db = await getDb();
 
     // Get the capability to check ownership
@@ -509,7 +592,7 @@ export const deleteCapability = async ({
           $inc: { useCount: -1 },
           $set: { updatedAt: new Date() },
         },
-        { session },
+        { session }
       );
     });
 
@@ -526,17 +609,26 @@ export const deleteCapability = async ({
   }
 };
 
-export const findSimilarCapabilities = async (description: string): Promise<Skill[]> => {
+export const findSimilarCapabilities = async (
+  description: string
+): Promise<Skill[]> => {
   try {
     const analysis = await skillMatchingService.analyzeSkill({ description });
     return analysis.matches.map((match) => match.skill);
   } catch (error) {
     console.error(`${LOG_PREFIX} Error finding similar capabilities:`, error);
-    throw ApiError.from(error, 500, ERROR_MESSAGES.FAILED_TO_FIND_SIMILAR_SKILLS);
+    throw ApiError.from(
+      error,
+      500,
+      ERROR_MESSAGES.FAILED_TO_FIND_SIMILAR_SKILLS
+    );
   }
 };
 
-export const searchCapabilities = async (input: string, limit: number = 10): Promise<Skill[]> => {
+export const searchCapabilities = async (
+  input: string,
+  limit: number = 10
+): Promise<Skill[]> => {
   try {
     const db = await getDb();
 
@@ -545,10 +637,10 @@ export const searchCapabilities = async (input: string, limit: number = 10): Pro
       .collection(COLLECTIONS.SKILLS)
       .find({
         $or: [
-          { name: { $regex: input, $options: "i" } },
-          { aliases: { $elemMatch: { $regex: input, $options: "i" } } },
-          { keywords: { $elemMatch: { $regex: input, $options: "i" } } },
-          { description: { $regex: input, $options: "i" } },
+          { name: { $regex: input, $options: 'i' } },
+          { aliases: { $elemMatch: { $regex: input, $options: 'i' } } },
+          { keywords: { $elemMatch: { $regex: input, $options: 'i' } } },
+          { description: { $regex: input, $options: 'i' } },
         ],
       })
       .sort({ useCount: -1 })
@@ -558,6 +650,10 @@ export const searchCapabilities = async (input: string, limit: number = 10): Pro
     return formatDocuments(skills) as Skill[];
   } catch (error) {
     console.error(`${LOG_PREFIX} Error searching capabilities:`, error);
-    throw ApiError.from(error, 500, ERROR_MESSAGES.FAILED_TO_FIND_SIMILAR_SKILLS);
+    throw ApiError.from(
+      error,
+      500,
+      ERROR_MESSAGES.FAILED_TO_FIND_SIMILAR_SKILLS
+    );
   }
 };

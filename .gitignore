@@ -76,6 +76,11 @@ typings/
 .env.test.local
 .env.production.local
 
+# Environment files in src/env directories
+**/src/env/.env
+**/src/env/.env.*
+!**/src/env/.env.example
+
 # parcel-bundler cache files
 .cache
 .parcel-cache

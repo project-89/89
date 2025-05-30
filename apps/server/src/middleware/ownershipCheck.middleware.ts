@@ -1,10 +1,10 @@
-import { Request, Response, NextFunction } from "express";
-import { ApiError } from "../utils";
-import { ERROR_MESSAGES, COLLECTIONS } from "../constants";
-import { getFirestore } from "firebase-admin/firestore";
-import { Account } from "../schemas";
+import { NextFunction, Request, Response } from 'express';
+import { COLLECTIONS, ERROR_MESSAGES } from '../constants';
+import { Account } from '../schemas';
+import { ApiError } from '../utils';
+import { getDb } from '../utils/mongodb';
 
-const LOG_PREFIX = "[Ownership Check]";
+const LOG_PREFIX = '[Ownership Check]';
 
 /**
  * Middleware to verify account ownership of resources
@@ -21,10 +21,14 @@ const LOG_PREFIX = "[Ownership Check]";
  *
  * Admin users bypass all ownership checks
  */
-export const verifyAccountOwnership = async (req: Request, res: Response, next: NextFunction) => {
+export const verifyAccountOwnership = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     // Skip OPTIONS requests
-    if (req.method === "OPTIONS") {
+    if (req.method === 'OPTIONS') {
       console.log(`${LOG_PREFIX} Skipping OPTIONS request`);
       return next();
     }
@@ -37,7 +41,9 @@ export const verifyAccountOwnership = async (req: Request, res: Response, next: 
     // Get the target resource IDs
     const targetAccountId = req.params.accountId || req.body.accountId;
     const targetFingerprintId =
-      req.params.fingerprintId || req.body.fingerprintId || req.query.fingerprintId;
+      req.params.fingerprintId ||
+      req.body.fingerprintId ||
+      req.query.fingerprintId;
 
     console.log(`${LOG_PREFIX} Checking ownership:`, {
       method: req.method,
@@ -48,14 +54,16 @@ export const verifyAccountOwnership = async (req: Request, res: Response, next: 
     });
 
     // Get the account document
-    const db = getFirestore();
-    const accountDoc = await db.collection(COLLECTIONS.ACCOUNTS).doc(account.id).get();
+    const db = await getDb();
+    const accountDoc = await db
+      .collection(COLLECTIONS.ACCOUNTS)
+      .findOne({ id: account.id });
 
-    if (!accountDoc.exists) {
+    if (!accountDoc) {
       throw new ApiError(404, ERROR_MESSAGES.ACCOUNT_NOT_FOUND);
     }
 
-    const accountData = accountDoc.data() as Account;
+    const accountData = accountDoc as unknown as Account;
 
     // Case 1: Account/Profile operations
     if (targetAccountId) {
