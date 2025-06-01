@@ -1,0 +1,1 @@
+export { default as Proxim8Avatar } from './Proxim8Avatar';

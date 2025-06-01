@@ -1,0 +1,72 @@
+/* Direct styling for cyberpunk theme */
+
+/* Base styles */
+body {
+  background-color: #050505;
+  color: white;
+  font-family: 'Chakra Petch', sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Orbitron', sans-serif;
+}
+
+/* Terminal elements */
+.terminal-text {
+  font-family: 'Share Tech Mono', monospace;
+  color: #00e639;
+}
+
+/* Neon effects */
+.neon-green {
+  text-shadow: 0 0 5px #00e639, 0 0 10px #00e639;
+}
+
+.neon-blue {
+  text-shadow: 0 0 5px #00f6ff, 0 0 10px #00f6ff;
+}
+
+.neon-magenta {
+  text-shadow: 0 0 5px #ff00ff, 0 0 10px #ff00ff;
+}
+
+.neon-border {
+  border: 1px solid #00e639;
+  box-shadow: 0 0 5px #00e639, 0 0 10px rgba(0, 230, 57, 0.5);
+}
+
+.neon-border-blue {
+  border: 1px solid #00f6ff;
+  box-shadow: 0 0 5px #00f6ff, 0 0 10px rgba(0, 246, 255, 0.5);
+}
+
+.neon-border-magenta {
+  border: 1px solid #ff00ff;
+  box-shadow: 0 0 5px #ff00ff, 0 0 10px rgba(255, 0, 255, 0.5);
+}
+
+/* Animations */
+.glitch {
+  animation: glitch 1s linear infinite;
+}
+
+.terminal-cursor {
+  animation: blink 1s step-end infinite;
+}
+
+.scan-line {
+  animation: scanLine 2s linear infinite;
+}
+
+/* Background elements */
+.terminal-bg {
+  background-color: #0C0C0C;
+}
+
+.cyber-midgray {
+  background-color: #1a1a1a;
+}
+
+.cyber-darkgray {
+  background-color: #101010;
+} 
