@@ -1,10 +1,10 @@
-import { z } from "zod";
-import { TimestampSchema } from ".";
+import { z } from 'zod';
+import { TimestampSchema } from '.';
 
 // Domain Models
 export const SiteSettingsSchema = z.object({
   notifications: z.boolean(),
-  privacy: z.enum(["public", "private"]),
+  privacy: z.enum(['public', 'private']),
 });
 
 export const SiteSchema = z.object({
@@ -16,6 +16,7 @@ export const SiteSchema = z.object({
   visits: z.number(),
   settings: SiteSettingsSchema,
   createdAt: TimestampSchema,
+  updatedAt: TimestampSchema.optional(),
 });
 
 // Request/Response Validation Schemas

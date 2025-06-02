@@ -1,6 +1,6 @@
-import { z } from "zod";
-import { ERROR_MESSAGES } from "../constants";
-import { TimestampSchema, SiteSettingsSchema } from ".";
+import { z } from 'zod';
+import { SiteSettingsSchema, TimestampSchema } from '.';
+import { ERROR_MESSAGES } from '../constants';
 
 // Domain Models
 export const VisitSchema = z.object({
@@ -14,20 +14,8 @@ export const VisitSchema = z.object({
   metadata: z.record(z.any()).optional(),
 });
 
-export const SiteSchema = z.object({
-  id: z.string(),
-  domain: z.string(),
-  fingerprintId: z.string(),
-  lastVisited: TimestampSchema,
-  title: z.string(),
-  visits: z.number(),
-  settings: SiteSettingsSchema,
-  createdAt: TimestampSchema,
-  updatedAt: TimestampSchema.optional(),
-});
-
 export const VisitPresenceSchema = z.object({
-  status: z.enum(["online", "offline", "away"]),
+  status: z.enum(['online', 'offline', 'away']),
   fingerprintId: z.string(),
   lastUpdated: z.number(),
   createdAt: z.number(),
@@ -115,7 +103,7 @@ export const VisitPresenceRequestSchema = z.object({
       required_error: ERROR_MESSAGES.MISSING_FINGERPRINT,
       invalid_type_error: ERROR_MESSAGES.INVALID_FINGERPRINT,
     }),
-    status: z.enum(["online", "offline", "away"] as const, {
+    status: z.enum(['online', 'offline', 'away'] as const, {
       invalid_type_error: ERROR_MESSAGES.INVALID_STATUS,
       required_error: ERROR_MESSAGES.MISSING_STATUS,
     }),
@@ -148,8 +136,8 @@ export const VisitHistorySchema = z.object({
   body: z.object({}).optional(),
   query: z
     .object({
-      limit: z.string().transform(Number).optional().default("50"),
-      offset: z.string().transform(Number).optional().default("0"),
+      limit: z.string().transform(Number).optional().default('50'),
+      offset: z.string().transform(Number).optional().default('0'),
     })
     .optional(),
 });
@@ -164,25 +152,28 @@ export const VisitPatternAnalysisSchema = z.object({
   body: z.object({}).optional(),
   query: z
     .object({
-      days: z.string().transform(Number).optional().default("30"),
+      days: z.string().transform(Number).optional().default('30'),
     })
     .optional(),
 });
 
 // Type Exports
 export type Visit = z.infer<typeof VisitSchema>;
-export type Site = z.infer<typeof SiteSchema>;
 export type VisitPresence = z.infer<typeof VisitPresenceSchema>;
 export type VisitResponse = z.infer<typeof VisitResponseSchema>;
 export type SiteResponse = z.infer<typeof SiteResponseSchema>;
 export type VisitHistoryResponse = z.infer<typeof VisitHistoryResponseSchema>;
 export type VisitPattern = z.infer<typeof VisitPatternSchema>;
 export type SiteEngagement = z.infer<typeof SiteEngagementSchema>;
-export type VisitPatternAnalysisResponse = z.infer<typeof VisitPatternAnalysisResponseSchema>;
+export type VisitPatternAnalysisResponse = z.infer<
+  typeof VisitPatternAnalysisResponseSchema
+>;
 
 // Request Types
 export type VisitLogRequest = z.infer<typeof VisitLogSchema>;
 export type VisitPresenceRequest = z.infer<typeof VisitPresenceRequestSchema>;
 export type VisitRemoveSiteRequest = z.infer<typeof VisitRemoveSiteSchema>;
 export type VisitHistoryRequest = z.infer<typeof VisitHistorySchema>;
-export type VisitPatternAnalysisRequest = z.infer<typeof VisitPatternAnalysisSchema>;
+export type VisitPatternAnalysisRequest = z.infer<
+  typeof VisitPatternAnalysisSchema
+>;
