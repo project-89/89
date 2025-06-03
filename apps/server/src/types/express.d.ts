@@ -1,11 +1,11 @@
-import { AccountRole } from "../constants";
+import { AccountRole } from '../constants';
 
 /**
  * Represents the authentication state of a request
  */
 interface AuthContext {
   // Basic tracking (always present after fingerprintVerify middleware)
-  fingerprint: {
+  fingerprint?: {
     id: string;
     roles: AccountRole[]; // Set by role middleware for permission checks
   };
@@ -25,6 +25,12 @@ interface AuthContext {
     id: string;
     isActive: boolean;
   };
+
+  // Proxim8 authentication (present after Proxim8 auth middleware)
+  proxim8?: {
+    walletAddress: string;
+    isAdmin: boolean;
+  };
 }
 
 declare global {
@@ -37,6 +43,7 @@ declare global {
        * 2. authMiddleware -> sets auth.wallet and/or auth.account
        * 3. roleMiddleware -> sets auth.account.roles
        * 4. agentMiddleware -> sets auth.agent
+       * 5. proxim8AuthMiddleware -> sets auth.proxim8
        */
       auth?: AuthContext;
 
