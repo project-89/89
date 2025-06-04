@@ -1,15 +1,15 @@
-import { COLLECTIONS } from "../constants/database/collections";
+import { z } from 'zod';
+import { COLLECTIONS } from '../constants/database/collections';
 import {
   Mission,
   MissionSchema,
-  MissionWithHistory,
   MissionStatusEnum,
-} from "../schemas/mission.schema";
-import { getDb, formatDocument, formatDocuments } from "../utils/mongodb";
-import { z } from "zod";
-import { idFilter, stringIdFilter } from "../utils/mongo-filters";
+  MissionWithHistory,
+} from '../schemas/mission.schema';
+import { idFilter } from '../utils/mongo-filters';
+import { formatDocument, formatDocuments, getDb } from '../utils/mongodb';
 
-const LOG_PREFIX = "[Mission Service]";
+const LOG_PREFIX = '[Mission Service]';
 
 export class MissionService {
   /**
@@ -38,7 +38,7 @@ export class MissionService {
       if (error instanceof Error) {
         throw new Error(`Failed to create mission: ${error.message}`);
       }
-      throw new Error("Failed to create mission: Unknown error");
+      throw new Error('Failed to create mission: Unknown error');
     }
   }
 
@@ -67,7 +67,7 @@ export class MissionService {
       if (error instanceof Error) {
         throw new Error(`Failed to get mission: ${error.message}`);
       }
-      throw new Error("Failed to get mission: Unknown error");
+      throw new Error('Failed to get mission: Unknown error');
     }
   }
 
@@ -96,7 +96,7 @@ export class MissionService {
       if (error instanceof Error) {
         throw new Error(`Failed to get mission with history: ${error.message}`);
       }
-      throw new Error("Failed to get mission with history: Unknown error");
+      throw new Error('Failed to get mission with history: Unknown error');
     }
   }
 
@@ -108,7 +108,7 @@ export class MissionService {
    */
   async updateMissionStatus(
     id: string,
-    status: z.infer<typeof MissionStatusEnum>,
+    status: z.infer<typeof MissionStatusEnum>
   ): Promise<Mission> {
     try {
       const db = await getDb();
@@ -122,11 +122,11 @@ export class MissionService {
       const result = await collection.findOneAndUpdate(
         filter,
         { $set: { status, updatedAt: Date.now() } },
-        { returnDocument: "after" },
+        { returnDocument: 'after' }
       );
 
       if (!result) {
-        throw new Error("Failed to update mission status: No data returned");
+        throw new Error('Failed to update mission status: No data returned');
       }
 
       return formatDocument(result) as Mission;
@@ -135,7 +135,7 @@ export class MissionService {
       if (error instanceof Error) {
         throw new Error(`Failed to update mission status: ${error.message}`);
       }
-      throw new Error("Failed to update mission status: Unknown error");
+      throw new Error('Failed to update mission status: Unknown error');
     }
   }
 
@@ -145,7 +145,10 @@ export class MissionService {
    * @param limit Number of missions to return
    * @returns Array of available missions
    */
-  async getAvailableMissions(participantId: string, limit = 10): Promise<Mission[]> {
+  async getAvailableMissions(
+    participantId: string,
+    limit = 10
+  ): Promise<Mission[]> {
     try {
       const db = await getDb();
       const collection = db.collection(COLLECTIONS.MISSIONS);
@@ -161,7 +164,7 @@ export class MissionService {
       if (error instanceof Error) {
         throw new Error(`Failed to get available missions: ${error.message}`);
       }
-      throw new Error("Failed to get available missions: Unknown error");
+      throw new Error('Failed to get available missions: Unknown error');
     }
   }
 
@@ -183,7 +186,7 @@ export class MissionService {
       if (error instanceof Error) {
         throw new Error(`Failed to get missions by creator: ${error.message}`);
       }
-      throw new Error("Failed to get missions by creator: Unknown error");
+      throw new Error('Failed to get missions by creator: Unknown error');
     }
   }
 
@@ -208,7 +211,7 @@ export class MissionService {
       if (error instanceof Error) {
         throw new Error(`Failed to delete mission: ${error.message}`);
       }
-      throw new Error("Failed to delete mission: Unknown error");
+      throw new Error('Failed to delete mission: Unknown error');
     }
   }
 
@@ -220,7 +223,7 @@ export class MissionService {
    */
   async updateMissionObjectives(
     id: string,
-    objectives: MissionWithHistory["objectives"],
+    objectives: MissionWithHistory['objectives']
   ): Promise<Mission> {
     try {
       const db = await getDb();
@@ -234,20 +237,24 @@ export class MissionService {
       const result = await collection.findOneAndUpdate(
         filter,
         { $set: { objectives, updatedAt: Date.now() } },
-        { returnDocument: "after" },
+        { returnDocument: 'after' }
       );
 
       if (!result) {
-        throw new Error("Failed to update mission objectives: No data returned");
+        throw new Error(
+          'Failed to update mission objectives: No data returned'
+        );
       }
 
       return formatDocument(result) as Mission;
     } catch (error: unknown) {
       console.error(`${LOG_PREFIX} Error updating mission objectives:`, error);
       if (error instanceof Error) {
-        throw new Error(`Failed to update mission objectives: ${error.message}`);
+        throw new Error(
+          `Failed to update mission objectives: ${error.message}`
+        );
       }
-      throw new Error("Failed to update mission objectives: Unknown error");
+      throw new Error('Failed to update mission objectives: Unknown error');
     }
   }
 
@@ -274,7 +281,7 @@ export class MissionService {
       if (error instanceof Error) {
         throw new Error(`Failed to get active missions: ${error.message}`);
       }
-      throw new Error("Failed to get active missions: Unknown error");
+      throw new Error('Failed to get active missions: Unknown error');
     }
   }
 
@@ -286,7 +293,7 @@ export class MissionService {
    */
   async addFailureRecord(
     id: string,
-    failureRecord: NonNullable<MissionWithHistory["failureRecords"]>[number],
+    failureRecord: NonNullable<MissionWithHistory['failureRecords']>[number]
   ): Promise<Mission> {
     try {
       const db = await getDb();
@@ -302,12 +309,12 @@ export class MissionService {
         {
           $push: { failureRecords: failureRecord },
           $set: { updatedAt: Date.now() },
-        },
-        { returnDocument: "after" },
+        } as any,
+        { returnDocument: 'after' }
       );
 
       if (!result) {
-        throw new Error("Failed to add failure record: No data returned");
+        throw new Error('Failed to add failure record: No data returned');
       }
 
       return formatDocument(result) as Mission;
@@ -316,7 +323,7 @@ export class MissionService {
       if (error instanceof Error) {
         throw new Error(`Failed to add failure record: ${error.message}`);
       }
-      throw new Error("Failed to add failure record: Unknown error");
+      throw new Error('Failed to add failure record: Unknown error');
     }
   }
 }

@@ -35,6 +35,9 @@ model Account {
   nftOwnerships NFTOwnership[]
   proxim8User   Proxim8User?
 
+  // Relations to Game entities
+  gameAgent GameAgent?
+
   @@map("accounts")
 }
 
@@ -328,6 +331,77 @@ model PublicVideo {
 }
 
 // ====================================
+// TRAINING/MISSION GAME ENTITIES
+// ====================================
+
+model GameAgent {
+  id             String    @id @default(auto()) @map("_id") @db.ObjectId
+  accountId      String    @db.ObjectId
+  codename       String?
+  rank           AgentRank @default(OBSERVER)
+  timelinePoints Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Relations
+  account            Account                     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  proxim8s           GameProxim8[]
+  missionDeployments TrainingMissionDeployment[]
+
+  @@unique([accountId])
+  @@map("game_agents")
+}
+
+model GameProxim8 {
+  id            String             @id @default(auto()) @map("_id") @db.ObjectId
+  gameAgentId   String             @db.ObjectId
+  nftId         String
+  name          String
+  personality   Proxim8Personality
+  level         Int                @default(1)
+  experience    Int                @default(0)
+  isDeployed    Boolean            @default(false)
+  lastMissionAt DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  // Relations
+  gameAgent          GameAgent                   @relation(fields: [gameAgentId], references: [id], onDelete: Cascade)
+  missionDeployments TrainingMissionDeployment[]
+
+  @@unique([gameAgentId, nftId])
+  @@map("game_proxim8s")
+}
+
+model TrainingMissionDeployment {
+  id               String           @id @default(auto()) @map("_id") @db.ObjectId
+  deploymentId     String           @unique
+  missionId        String
+  gameAgentId      String           @db.ObjectId
+  gameProxim8Id    String           @db.ObjectId
+  approach         MissionApproach
+  deployedAt       DateTime         @default(now())
+  completesAt      DateTime
+  duration         Int // Duration in milliseconds
+  status           DeploymentStatus @default(ACTIVE)
+  currentPhase     Int              @default(0)
+  finalSuccessRate Float
+  phaseOutcomes    Json // Array of phase outcomes
+  result           Json? // Mission result
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  // Relations
+  gameAgent   GameAgent   @relation(fields: [gameAgentId], references: [id], onDelete: Cascade)
+  gameProxim8 GameProxim8 @relation(fields: [gameProxim8Id], references: [id], onDelete: Cascade)
+
+  @@index([gameAgentId])
+  @@index([status])
+  @@index([missionId])
+  @@map("training_mission_deployments")
+}
+
+// ====================================
 // ENUMS
 // ====================================
 
@@ -367,4 +441,30 @@ enum PipelineStatus {
   INACTIVE
   ERROR
   MAINTENANCE
+}
+
+enum AgentRank {
+  OBSERVER
+  FIELD_AGENT
+  SENIOR_AGENT
+  ARCHITECT
+}
+
+enum Proxim8Personality {
+  ANALYTICAL
+  AGGRESSIVE
+  DIPLOMATIC
+  ADAPTIVE
+}
+
+enum MissionApproach {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum DeploymentStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
 }
