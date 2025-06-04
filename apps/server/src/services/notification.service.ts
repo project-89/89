@@ -1,4 +1,5 @@
 import { ERROR_MESSAGES } from '../constants';
+import { NotificationType } from '../generated/prisma';
 import {
   BulkCreateNotificationsRequest,
   CreateNotificationRequest,
@@ -8,20 +9,53 @@ import {
   MarkAllNotificationsReadRequest,
   MarkNotificationReadRequest,
   Notification,
-  NotificationDocument,
   NotificationListResponse,
   NotificationStatsResponse,
-  toNotification,
 } from '../schemas';
-import { ApiError, idFilter } from '../utils';
-import { getDb } from '../utils/mongodb';
+import { ApiError } from '../utils';
+import { prisma } from './prisma.service';
 
 const LOG_PREFIX = '[Notification Service]';
 
-// Add Proxim8 collections to constants
-const PROXIM8_COLLECTIONS = {
-  NOTIFICATIONS: 'proxim8.notifications',
-} as const;
+// Helper function to map notification types
+const mapNotificationType = (type: string): NotificationType => {
+  const typeMap: Record<string, NotificationType> = {
+    video_completed: NotificationType.VIDEO_COMPLETED,
+    video_failed: NotificationType.VIDEO_FAILED,
+    system_announcement: NotificationType.SYSTEM_ANNOUNCEMENT,
+    nft_verified: NotificationType.NFT_VERIFIED,
+    profile_update: NotificationType.PROFILE_UPDATE,
+    mission_completed: NotificationType.MISSION_COMPLETED,
+    VIDEO_COMPLETED: NotificationType.VIDEO_COMPLETED,
+    VIDEO_FAILED: NotificationType.VIDEO_FAILED,
+    SYSTEM_ANNOUNCEMENT: NotificationType.SYSTEM_ANNOUNCEMENT,
+    NFT_VERIFIED: NotificationType.NFT_VERIFIED,
+    PROFILE_UPDATE: NotificationType.PROFILE_UPDATE,
+    MISSION_COMPLETED: NotificationType.MISSION_COMPLETED,
+  };
+  return typeMap[type] || NotificationType.SYSTEM_ANNOUNCEMENT;
+};
+
+// Helper function to convert dates to timestamps
+const toTimestamp = (date: Date): number => {
+  return Math.floor(date.getTime() / 1000);
+};
+
+// Helper function to convert Prisma notification to API format
+const toNotificationResponse = (notification: any): Notification => {
+  return {
+    id: notification.id,
+    userId: notification.account.walletAddress, // Legacy field
+    walletAddress: notification.account.walletAddress,
+    type: notification.type.toLowerCase(),
+    title: notification.title,
+    message: notification.message,
+    read: notification.isRead,
+    data: notification.data || undefined,
+    createdAt: toTimestamp(notification.createdAt),
+    updatedAt: toTimestamp(notification.updatedAt),
+  };
+};
 
 /**
  * Create a new notification
@@ -31,35 +65,46 @@ export const createNotification = async (
 ): Promise<Notification> => {
   try {
     console.log(`${LOG_PREFIX} Creating notification:`, request.body.type);
-    const db = await getDb();
 
     const now = new Date();
 
-    // Create notification document
-    const notificationDoc: Omit<NotificationDocument, 'id'> = {
-      userId: request.body.userId,
-      walletAddress: request.body.walletAddress.toLowerCase(),
-      type: request.body.type,
-      title: request.body.title,
-      message: request.body.message,
-      read: false,
-      data: request.body.data,
-      createdAt: now,
-      updatedAt: now,
-    };
+    // Find or create account
+    const account = await prisma.account.upsert({
+      where: { walletAddress: request.body.walletAddress.toLowerCase() },
+      create: {
+        walletAddress: request.body.walletAddress.toLowerCase(),
+        createdAt: now,
+        updatedAt: now,
+      },
+      update: {
+        updatedAt: now,
+      },
+    });
 
-    // Insert into database
-    const result = await db
-      .collection(PROXIM8_COLLECTIONS.NOTIFICATIONS)
-      .insertOne(notificationDoc);
-    const notificationId = result.insertedId.toString();
+    // Create notification
+    const notification = await prisma.notification.create({
+      data: {
+        accountId: account.id,
+        type: mapNotificationType(request.body.type),
+        title: request.body.title,
+        message: request.body.message,
+        data: request.body.data || null,
+        isRead: false,
+        createdAt: now,
+        updatedAt: now,
+      },
+      include: {
+        account: {
+          select: {
+            walletAddress: true,
+          },
+        },
+      },
+    });
 
-    console.log(`${LOG_PREFIX} Notification created:`, notificationId);
+    console.log(`${LOG_PREFIX} Notification created:`, notification.id);
 
-    return toNotification(
-      { ...notificationDoc, _id: result.insertedId },
-      notificationId
-    );
+    return toNotificationResponse(notification);
   } catch (error) {
     console.error(`${LOG_PREFIX} Error creating notification:`, error);
     throw ApiError.from(error, 500, ERROR_MESSAGES.INTERNAL_ERROR);
@@ -77,21 +122,23 @@ export const getNotification = async (
       `${LOG_PREFIX} Getting notification:`,
       request.params.notificationId
     );
-    const db = await getDb();
 
-    const filter = idFilter(request.params.notificationId);
-    if (!filter) {
+    const notification = await prisma.notification.findUnique({
+      where: { id: request.params.notificationId },
+      include: {
+        account: {
+          select: {
+            walletAddress: true,
+          },
+        },
+      },
+    });
+
+    if (!notification) {
       return null;
     }
 
-    const notificationDoc = await db
-      .collection(PROXIM8_COLLECTIONS.NOTIFICATIONS)
-      .findOne(filter);
-    if (!notificationDoc) {
-      return null;
-    }
-
-    return toNotification(notificationDoc, request.params.notificationId);
+    return toNotificationResponse(notification);
   } catch (error) {
     console.error(`${LOG_PREFIX} Error getting notification:`, error);
     throw ApiError.from(error, 500, ERROR_MESSAGES.INTERNAL_ERROR);
@@ -103,61 +150,67 @@ export const getNotification = async (
  */
 export const getUserNotifications = async (
   request: GetUserNotificationsRequest,
-  userId?: string
+  walletAddress?: string
 ): Promise<NotificationListResponse> => {
   try {
     console.log(`${LOG_PREFIX} Getting user notifications`);
-    const db = await getDb();
 
     const limit = request.query?.limit || 20;
     const offset = request.query?.offset || 0;
 
-    // Build query
-    const query: any = {};
-
-    // User identification - use either userId or walletAddress
-    if (userId) {
-      query.userId = userId;
-    } else if (request.query?.userId) {
-      query.userId = request.query.userId;
+    // Determine wallet address to use
+    let targetWalletAddress: string;
+    if (walletAddress) {
+      targetWalletAddress = walletAddress;
     } else if (request.query?.walletAddress) {
-      query.walletAddress = request.query.walletAddress.toLowerCase();
+      targetWalletAddress = request.query.walletAddress.toLowerCase();
     } else {
       throw new ApiError(400, 'User identification required');
     }
 
+    // Build where clause
+    const where: any = {
+      account: {
+        walletAddress: targetWalletAddress,
+      },
+    };
+
     // Additional filters
     if (request.query?.read !== undefined) {
-      query.read = request.query.read;
+      where.isRead = request.query.read;
     }
     if (request.query?.type) {
-      query.type = request.query.type;
+      where.type = mapNotificationType(request.query.type);
     }
 
-    // Get total count and unread count
-    const total = await db
-      .collection(PROXIM8_COLLECTIONS.NOTIFICATIONS)
-      .countDocuments(query);
-    const unreadQuery = { ...query, read: false };
-    const unreadCount = await db
-      .collection(PROXIM8_COLLECTIONS.NOTIFICATIONS)
-      .countDocuments(unreadQuery);
+    // Get total count and unread count in parallel
+    const [total, unreadCount, notifications] = await Promise.all([
+      prisma.notification.count({ where }),
+      prisma.notification.count({
+        where: {
+          ...where,
+          isRead: false,
+        },
+      }),
+      prisma.notification.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: offset,
+        take: limit,
+        include: {
+          account: {
+            select: {
+              walletAddress: true,
+            },
+          },
+        },
+      }),
+    ]);
 
-    // Get paginated results
-    const notificationDocs = await db
-      .collection(PROXIM8_COLLECTIONS.NOTIFICATIONS)
-      .find(query)
-      .sort({ createdAt: -1 })
-      .skip(offset)
-      .limit(limit)
-      .toArray();
-
-    const notifications = notificationDocs.map((doc) =>
-      toNotification(doc, doc._id.toString())
-    );
+    const notificationResponses = notifications.map(toNotificationResponse);
 
     return {
-      notifications,
+      notifications: notificationResponses,
       total,
       unreadCount,
       hasMore: offset + limit < total,
@@ -173,47 +226,53 @@ export const getUserNotifications = async (
  */
 export const markNotificationRead = async (
   request: MarkNotificationReadRequest,
-  userId?: string
+  walletAddress?: string
 ): Promise<Notification> => {
   try {
     console.log(
       `${LOG_PREFIX} Marking notification read:`,
       request.params.notificationId
     );
-    const db = await getDb();
 
-    // Get notification first to verify ownership
-    const filter = idFilter(request.params.notificationId);
-    if (!filter) {
+    // Get notification with account info
+    const notification = await prisma.notification.findUnique({
+      where: { id: request.params.notificationId },
+      include: {
+        account: {
+          select: {
+            walletAddress: true,
+          },
+        },
+      },
+    });
+
+    if (!notification) {
       throw new ApiError(404, 'Notification not found');
     }
 
-    const notificationDoc = await db
-      .collection(PROXIM8_COLLECTIONS.NOTIFICATIONS)
-      .findOne(filter);
-    if (!notificationDoc) {
-      throw new ApiError(404, 'Notification not found');
-    }
-
-    // Verify ownership if userId provided
-    if (userId && notificationDoc.userId !== userId) {
+    // Verify ownership if walletAddress provided
+    if (walletAddress && notification.account.walletAddress !== walletAddress) {
       throw new ApiError(403, 'Not authorized to modify this notification');
     }
 
     // Update notification
-    const now = new Date();
-    await db.collection(PROXIM8_COLLECTIONS.NOTIFICATIONS).updateOne(filter, {
-      $set: {
-        read: request.body.read,
-        updatedAt: now,
+    const updatedNotification = await prisma.notification.update({
+      where: { id: request.params.notificationId },
+      data: {
+        isRead: request.body.read,
+        readAt: request.body.read ? new Date() : null,
+        updatedAt: new Date(),
+      },
+      include: {
+        account: {
+          select: {
+            walletAddress: true,
+          },
+        },
       },
     });
 
-    // Get updated notification
-    const updatedDoc = await db
-      .collection(PROXIM8_COLLECTIONS.NOTIFICATIONS)
-      .findOne(filter);
-    return toNotification(updatedDoc, request.params.notificationId);
+    return toNotificationResponse(updatedNotification);
   } catch (error) {
     console.error(`${LOG_PREFIX} Error marking notification read:`, error);
     throw ApiError.from(error, 500, ERROR_MESSAGES.INTERNAL_ERROR);
@@ -225,42 +284,38 @@ export const markNotificationRead = async (
  */
 export const markAllNotificationsRead = async (
   request: MarkAllNotificationsReadRequest,
-  userId?: string
+  walletAddress?: string
 ): Promise<number> => {
   try {
     console.log(`${LOG_PREFIX} Marking all notifications read`);
-    const db = await getDb();
 
-    // Build query for user identification
-    const query: any = {};
-    if (userId) {
-      query.userId = userId;
-    } else if (request.body.userId) {
-      query.userId = request.body.userId;
+    // Determine wallet address to use
+    let targetWalletAddress: string;
+    if (walletAddress) {
+      targetWalletAddress = walletAddress;
     } else if (request.body.walletAddress) {
-      query.walletAddress = request.body.walletAddress.toLowerCase();
+      targetWalletAddress = request.body.walletAddress.toLowerCase();
     } else {
       throw new ApiError(400, 'User identification required');
     }
 
-    // Only update unread notifications
-    query.read = false;
-
-    // Update all unread notifications
-    const now = new Date();
-    const result = await db
-      .collection(PROXIM8_COLLECTIONS.NOTIFICATIONS)
-      .updateMany(query, {
-        $set: {
-          read: true,
-          updatedAt: now,
+    // Update all unread notifications for the user
+    const result = await prisma.notification.updateMany({
+      where: {
+        account: {
+          walletAddress: targetWalletAddress,
         },
-      });
+        isRead: false,
+      },
+      data: {
+        isRead: true,
+        readAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
 
-    console.log(
-      `${LOG_PREFIX} Marked ${result.modifiedCount} notifications as read`
-    );
-    return result.modifiedCount;
+    console.log(`${LOG_PREFIX} Marked ${result.count} notifications as read`);
+    return result.count;
   } catch (error) {
     console.error(`${LOG_PREFIX} Error marking all notifications read:`, error);
     throw ApiError.from(error, 500, ERROR_MESSAGES.INTERNAL_ERROR);
@@ -272,39 +327,41 @@ export const markAllNotificationsRead = async (
  */
 export const deleteNotification = async (
   request: DeleteNotificationRequest,
-  userId?: string
+  walletAddress?: string
 ): Promise<boolean> => {
   try {
     console.log(
       `${LOG_PREFIX} Deleting notification:`,
       request.params.notificationId
     );
-    const db = await getDb();
 
-    // Get notification first to verify ownership
-    const filter = idFilter(request.params.notificationId);
-    if (!filter) {
+    // Get notification with account info
+    const notification = await prisma.notification.findUnique({
+      where: { id: request.params.notificationId },
+      include: {
+        account: {
+          select: {
+            walletAddress: true,
+          },
+        },
+      },
+    });
+
+    if (!notification) {
       throw new ApiError(404, 'Notification not found');
     }
 
-    const notificationDoc = await db
-      .collection(PROXIM8_COLLECTIONS.NOTIFICATIONS)
-      .findOne(filter);
-    if (!notificationDoc) {
-      throw new ApiError(404, 'Notification not found');
-    }
-
-    // Verify ownership if userId provided
-    if (userId && notificationDoc.userId !== userId) {
+    // Verify ownership if walletAddress provided
+    if (walletAddress && notification.account.walletAddress !== walletAddress) {
       throw new ApiError(403, 'Not authorized to delete this notification');
     }
 
     // Delete notification
-    const result = await db
-      .collection(PROXIM8_COLLECTIONS.NOTIFICATIONS)
-      .deleteOne(filter);
+    await prisma.notification.delete({
+      where: { id: request.params.notificationId },
+    });
 
-    return result.deletedCount > 0;
+    return true;
   } catch (error) {
     console.error(`${LOG_PREFIX} Error deleting notification:`, error);
     throw ApiError.from(error, 500, ERROR_MESSAGES.INTERNAL_ERROR);
@@ -321,30 +378,59 @@ export const bulkCreateNotifications = async (
     console.log(
       `${LOG_PREFIX} Bulk creating ${request.body.notifications.length} notifications`
     );
-    const db = await getDb();
 
     const now = new Date();
 
-    // Prepare notification documents
-    const notificationDocs = request.body.notifications.map((notification) => ({
-      userId: notification.userId,
-      walletAddress: notification.walletAddress.toLowerCase(),
-      type: notification.type,
+    // Get or create accounts for all wallet addresses
+    const walletAddresses = [
+      ...new Set(
+        request.body.notifications.map((n) => n.walletAddress.toLowerCase())
+      ),
+    ];
+
+    // Upsert all accounts
+    const accounts = await Promise.all(
+      walletAddresses.map((walletAddress) =>
+        prisma.account.upsert({
+          where: { walletAddress },
+          create: {
+            walletAddress,
+            createdAt: now,
+            updatedAt: now,
+          },
+          update: {
+            updatedAt: now,
+          },
+        })
+      )
+    );
+
+    // Create a map of wallet address to account ID
+    const walletToAccountId = new Map(
+      accounts.map((account) => [account.walletAddress, account.id])
+    );
+
+    // Prepare notification data
+    const notificationData = request.body.notifications.map((notification) => ({
+      accountId: walletToAccountId.get(
+        notification.walletAddress.toLowerCase()
+      )!,
+      type: mapNotificationType(notification.type),
       title: notification.title,
       message: notification.message,
-      read: false,
-      data: notification.data,
+      data: notification.data || null,
+      isRead: false,
       createdAt: now,
       updatedAt: now,
     }));
 
-    // Insert all notifications
-    const result = await db
-      .collection(PROXIM8_COLLECTIONS.NOTIFICATIONS)
-      .insertMany(notificationDocs);
+    // Bulk create notifications
+    const result = await prisma.notification.createMany({
+      data: notificationData,
+    });
 
-    console.log(`${LOG_PREFIX} Created ${result.insertedCount} notifications`);
-    return result.insertedCount;
+    console.log(`${LOG_PREFIX} Created ${result.count} notifications`);
+    return result.count;
   } catch (error) {
     console.error(`${LOG_PREFIX} Error bulk creating notifications:`, error);
     throw ApiError.from(error, 500, ERROR_MESSAGES.INTERNAL_ERROR);
@@ -360,43 +446,44 @@ export const getNotificationStats = async (
 ): Promise<NotificationStatsResponse> => {
   try {
     console.log(`${LOG_PREFIX} Getting notification stats`);
-    const db = await getDb();
 
-    // Build user query
-    const userQuery: any = {};
-    if (userId) {
-      userQuery.userId = userId;
-    } else if (walletAddress) {
-      userQuery.walletAddress = walletAddress.toLowerCase();
+    // Determine wallet address to use (userId is legacy, use walletAddress)
+    let targetWalletAddress: string;
+    if (walletAddress) {
+      targetWalletAddress = walletAddress;
     } else {
       throw new ApiError(400, 'User identification required');
     }
 
-    // Get total count
-    const total = await db
-      .collection(PROXIM8_COLLECTIONS.NOTIFICATIONS)
-      .countDocuments(userQuery);
+    const where = {
+      account: {
+        walletAddress: targetWalletAddress,
+      },
+    };
 
-    // Get unread count
-    const unreadCount = await db
-      .collection(PROXIM8_COLLECTIONS.NOTIFICATIONS)
-      .countDocuments({
-        ...userQuery,
-        read: false,
-      });
+    // Get total and unread counts in parallel
+    const [total, unreadCount] = await Promise.all([
+      prisma.notification.count({ where }),
+      prisma.notification.count({
+        where: {
+          ...where,
+          isRead: false,
+        },
+      }),
+    ]);
 
-    // Get count by type
-    const typeAggregation = await db
-      .collection(PROXIM8_COLLECTIONS.NOTIFICATIONS)
-      .aggregate([
-        { $match: userQuery },
-        { $group: { _id: '$type', count: { $sum: 1 } } },
-      ])
-      .toArray();
+    // Get count by type using groupBy
+    const typeGroups = await prisma.notification.groupBy({
+      by: ['type'],
+      where,
+      _count: {
+        type: true,
+      },
+    });
 
     const byType: Record<string, number> = {};
-    typeAggregation.forEach((item) => {
-      byType[item._id] = item.count;
+    typeGroups.forEach((group) => {
+      byType[group.type.toLowerCase()] = group._count.type;
     });
 
     return {
@@ -409,6 +496,3 @@ export const getNotificationStats = async (
     throw ApiError.from(error, 500, ERROR_MESSAGES.INTERNAL_ERROR);
   }
 };
-
-// Export collection constants
-export { PROXIM8_COLLECTIONS };

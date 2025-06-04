@@ -1,0 +1,370 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// ====================================
+// CORE SERVER ENTITIES
+// ====================================
+
+model Account {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  walletAddress String   @unique
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations to core entities
+  profiles     Profile[]
+  fingerprints Fingerprint[]
+  agents       Agent[]
+
+  // Relations to Proxim8 entities
+  videos        Video[]
+  notifications Notification[]
+  nftOwnerships NFTOwnership[]
+  proxim8User   Proxim8User?
+
+  @@map("accounts")
+}
+
+model Profile {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  accountId   String   @db.ObjectId
+  username    String   @unique
+  bio         String?
+  avatar      String?
+  isPublic    Boolean  @default(true)
+  socialLinks Json? // { twitter?: string, discord?: string, etc }
+  preferences Json? // User preferences object
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  account        Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  visits         Visit[]
+  impressions    Impression[]
+  socialProfiles SocialProfile[]
+
+  @@map("profiles")
+}
+
+model Fingerprint {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  accountId   String?  @db.ObjectId
+  fingerprint String   @unique
+  roles       String[] // Array of role names
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  account Account? @relation(fields: [accountId], references: [id])
+  visits  Visit[]
+
+  @@map("fingerprints")
+}
+
+model Agent {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  accountId   String   @db.ObjectId
+  name        String
+  description String?
+  avatar      String?
+  isActive    Boolean  @default(true)
+  config      Json? // Agent configuration
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  account   Account     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  knowledge Knowledge[]
+  missions  Mission[]
+
+  @@map("agents")
+}
+
+model Visit {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  profileId     String?  @db.ObjectId
+  fingerprintId String   @db.ObjectId
+  path          String
+  userAgent     String?
+  ipAddress     String?
+  referrer      String?
+  duration      Int? // Visit duration in milliseconds
+  createdAt     DateTime @default(now())
+
+  // Relations
+  profile     Profile?    @relation(fields: [profileId], references: [id])
+  fingerprint Fingerprint @relation(fields: [fingerprintId], references: [id])
+
+  @@map("visits")
+}
+
+model Impression {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  profileId String   @db.ObjectId
+  type      String // Type of impression (view, click, etc)
+  context   Json? // Additional context data
+  createdAt DateTime @default(now())
+
+  // Relations
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("impressions")
+}
+
+model SocialProfile {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  profileId String   @db.ObjectId
+  platform  String // twitter, discord, github, etc
+  username  String
+  url       String?
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, platform])
+  @@map("social_profiles")
+}
+
+model Knowledge {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  agentId   String   @db.ObjectId
+  title     String
+  content   String
+  type      String // document, url, text, etc
+  source    String? // Source of the knowledge
+  metadata  Json? // Additional metadata
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@map("knowledge")
+}
+
+model Mission {
+  id          String        @id @default(auto()) @map("_id") @db.ObjectId
+  agentId     String        @db.ObjectId
+  title       String
+  description String
+  status      MissionStatus @default(PENDING)
+  priority    Int           @default(1)
+  dueDate     DateTime?
+  completedAt DateTime?
+  result      Json? // Mission result data
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@map("missions")
+}
+
+// ====================================
+// PROXIM8 ENTITIES
+// ====================================
+
+model Proxim8User {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  accountId   String   @unique @db.ObjectId
+  username    String   @unique
+  email       String?
+  bio         String?
+  avatar      String?
+  isPublic    Boolean  @default(true)
+  isAdmin     Boolean  @default(false)
+  socialLinks Json? // { twitter?: string, discord?: string, etc }
+  preferences Json? // User preferences
+  stats       Json? // User statistics
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("proxim8_users")
+}
+
+model Video {
+  id           String      @id @default(auto()) @map("_id") @db.ObjectId
+  accountId    String      @db.ObjectId
+  nftId        String
+  jobId        String      @unique
+  status       VideoStatus @default(PENDING)
+  title        String?
+  description  String?
+  videoUrl     String?
+  thumbnailUrl String?
+  duration     Int? // Video duration in seconds
+  fileSize     Int? // File size in bytes
+  resolution   String? // Video resolution (e.g., "1920x1080")
+  isPublic     Boolean     @default(false)
+  metadata     Json? // Additional metadata
+  errorMessage String? // Error message if failed
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  // Relations
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("videos")
+}
+
+model Notification {
+  id        String           @id @default(auto()) @map("_id") @db.ObjectId
+  accountId String           @db.ObjectId
+  type      NotificationType
+  title     String
+  message   String
+  data      Json? // Additional notification data
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  // Relations
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model NFTOwnership {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  nftId           String
+  accountId       String    @db.ObjectId
+  walletAddress   String
+  contractAddress String
+  tokenId         String
+  blockchain      String    @default("solana")
+  verified        Boolean   @default(false)
+  lastVerified    DateTime?
+  metadata        Json? // NFT metadata
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([nftId, accountId])
+  @@index([walletAddress])
+  @@index([contractAddress, tokenId])
+  @@map("nft_ownership")
+}
+
+model Lore {
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  nftId      String
+  title      String
+  content    String
+  background String
+  traits     Json?
+  claimed    Boolean   @default(false)
+  claimedBy  String?
+  claimedAt  DateTime?
+  category   String?
+  tags       String[]
+  isPublic   Boolean   @default(true)
+  metadata   Json?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([nftId])
+  @@index([claimed])
+  @@map("lore")
+}
+
+model Pipeline {
+  id          String         @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String?
+  type        PipelineType
+  status      PipelineStatus @default(INACTIVE)
+  config      Json // Pipeline configuration
+  metadata    Json? // Additional metadata
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@map("pipelines")
+}
+
+model PublicVideo {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  videoId       String   @unique @db.ObjectId
+  title         String
+  description   String?
+  thumbnailUrl  String?
+  videoUrl      String
+  nftId         String
+  walletAddress String
+  views         Int      @default(0)
+  likes         Int      @default(0)
+  featured      Boolean  @default(false)
+  tags          String[] // Array of tags
+  metadata      Json? // Additional metadata
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([featured])
+  @@index([views])
+  @@index([createdAt])
+  @@map("public_videos")
+}
+
+// ====================================
+// ENUMS
+// ====================================
+
+enum VideoStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum NotificationType {
+  VIDEO_COMPLETED
+  VIDEO_FAILED
+  SYSTEM_ANNOUNCEMENT
+  NFT_VERIFIED
+  PROFILE_UPDATE
+  MISSION_COMPLETED
+}
+
+enum MissionStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum PipelineType {
+  VIDEO_GENERATION
+  DATA_PROCESSING
+  NOTIFICATION
+  ANALYTICS
+}
+
+enum PipelineStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+  MAINTENANCE
+}

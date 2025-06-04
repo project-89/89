@@ -21,6 +21,7 @@
   "license": "ISC",
   "packageManager": "pnpm@10.11.0",
   "devDependencies": {
+    "@types/node": "^18.19.105",
     "@typescript-eslint/eslint-plugin": "8.33.0",
     "@typescript-eslint/parser": "8.33.0",
     "eslint": "9.27.0",
@@ -28,5 +29,8 @@
     "prettier": "3.5.3",
     "prettier-plugin-organize-imports": "4.1.0",
     "turbo": "^2.5.3"
+  },
+  "dependencies": {
+    "dotenv": "^16.5.0"
   }
 }

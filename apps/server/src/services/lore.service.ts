@@ -10,21 +10,36 @@ import {
   GetLoreRequest,
   GetUnclaimedLoreRequest,
   Lore,
-  LoreDocument,
   LoreListResponse,
   LoreStatsResponse,
-  toLore,
   UpdateLoreRequest,
 } from '../schemas';
-import { ApiError, idFilter } from '../utils';
-import { getDb } from '../utils/mongodb';
+import { ApiError } from '../utils';
+import { prisma } from './prisma.service';
 
 const LOG_PREFIX = '[Lore Service]';
 
-// Add Proxim8 collections to constants
-const PROXIM8_COLLECTIONS = {
-  LORE: 'proxim8.lore',
-} as const;
+// Helper function to convert dates to timestamps
+const toTimestamp = (date: Date): number => {
+  return Math.floor(date.getTime() / 1000);
+};
+
+// Helper function to convert Prisma lore to API format
+const toLoreResponse = (lore: any): Lore => {
+  return {
+    id: lore.id,
+    nftId: lore.nftId,
+    title: lore.title,
+    content: lore.content,
+    background: lore.background,
+    traits: lore.traits || {},
+    claimed: lore.claimed,
+    claimedBy: lore.claimedBy || undefined,
+    claimedAt: lore.claimedAt ? toTimestamp(lore.claimedAt) : undefined,
+    createdAt: toTimestamp(lore.createdAt),
+    updatedAt: toTimestamp(lore.updatedAt),
+  };
+};
 
 /**
  * Create a new lore entry
@@ -32,11 +47,10 @@ const PROXIM8_COLLECTIONS = {
 export const createLore = async (request: CreateLoreRequest): Promise<Lore> => {
   try {
     console.log(`${LOG_PREFIX} Creating lore for NFT:`, request.body.nftId);
-    const db = await getDb();
 
     // Check if lore already exists for this NFT
-    const existingLore = await db.collection(PROXIM8_COLLECTIONS.LORE).findOne({
-      nftId: request.body.nftId,
+    const existingLore = await prisma.lore.findFirst({
+      where: { nftId: request.body.nftId },
     });
 
     if (existingLore) {
@@ -45,29 +59,23 @@ export const createLore = async (request: CreateLoreRequest): Promise<Lore> => {
 
     const now = new Date();
 
-    // Create lore document
-    const loreDoc: Omit<LoreDocument, 'id'> = {
-      nftId: request.body.nftId,
-      title: request.body.title,
-      content: request.body.content,
-      background: request.body.background,
-      traits: request.body.traits || {},
-      claimed: false,
-      claimedBy: undefined,
-      claimedAt: undefined,
-      createdAt: now,
-      updatedAt: now,
-    };
+    // Create lore record
+    const lore = await prisma.lore.create({
+      data: {
+        nftId: request.body.nftId,
+        title: request.body.title,
+        content: request.body.content,
+        background: request.body.background,
+        traits: request.body.traits || {},
+        claimed: false,
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
 
-    // Insert into database
-    const result = await db
-      .collection(PROXIM8_COLLECTIONS.LORE)
-      .insertOne(loreDoc);
-    const loreId = result.insertedId.toString();
+    console.log(`${LOG_PREFIX} Lore created:`, lore.id);
 
-    console.log(`${LOG_PREFIX} Lore created:`, loreId);
-
-    return toLore({ ...loreDoc, _id: result.insertedId }, loreId);
+    return toLoreResponse(lore);
   } catch (error) {
     console.error(`${LOG_PREFIX} Error creating lore:`, error);
     throw ApiError.from(error, 500, ERROR_MESSAGES.INTERNAL_ERROR);
@@ -82,21 +90,16 @@ export const getLore = async (
 ): Promise<Lore | null> => {
   try {
     console.log(`${LOG_PREFIX} Getting lore:`, request.params.loreId);
-    const db = await getDb();
 
-    const filter = idFilter(request.params.loreId);
-    if (!filter) {
+    const lore = await prisma.lore.findUnique({
+      where: { id: request.params.loreId },
+    });
+
+    if (!lore) {
       return null;
     }
 
-    const loreDoc = await db
-      .collection(PROXIM8_COLLECTIONS.LORE)
-      .findOne(filter);
-    if (!loreDoc) {
-      return null;
-    }
-
-    return toLore(loreDoc, request.params.loreId);
+    return toLoreResponse(lore);
   } catch (error) {
     console.error(`${LOG_PREFIX} Error getting lore:`, error);
     throw ApiError.from(error, 500, ERROR_MESSAGES.INTERNAL_ERROR);
@@ -111,17 +114,16 @@ export const getLoreByNft = async (
 ): Promise<Lore | null> => {
   try {
     console.log(`${LOG_PREFIX} Getting lore by NFT:`, request.params.nftId);
-    const db = await getDb();
 
-    const loreDoc = await db.collection(PROXIM8_COLLECTIONS.LORE).findOne({
-      nftId: request.params.nftId,
+    const lore = await prisma.lore.findFirst({
+      where: { nftId: request.params.nftId },
     });
 
-    if (!loreDoc) {
+    if (!lore) {
       return null;
     }
 
-    return toLore(loreDoc, loreDoc._id.toString());
+    return toLoreResponse(lore);
   } catch (error) {
     console.error(`${LOG_PREFIX} Error getting lore by NFT:`, error);
     throw ApiError.from(error, 500, ERROR_MESSAGES.INTERNAL_ERROR);
@@ -136,38 +138,34 @@ export const getLoreList = async (
 ): Promise<LoreListResponse> => {
   try {
     console.log(`${LOG_PREFIX} Getting lore list`);
-    const db = await getDb();
 
     const limit = request.query?.limit || 20;
     const offset = request.query?.offset || 0;
 
-    // Build query
-    const query: any = {};
+    // Build where clause
+    const where: any = {};
     if (request.query?.claimed !== undefined) {
-      query.claimed = request.query.claimed;
+      where.claimed = request.query.claimed;
     }
     if (request.query?.claimedBy) {
-      query.claimedBy = request.query.claimedBy.toLowerCase();
+      where.claimedBy = request.query.claimedBy.toLowerCase();
     }
     if (request.query?.nftId) {
-      query.nftId = request.query.nftId;
+      where.nftId = request.query.nftId;
     }
 
-    // Get total count
-    const total = await db
-      .collection(PROXIM8_COLLECTIONS.LORE)
-      .countDocuments(query);
+    // Get total count and paginated results in parallel
+    const [total, loreRecords] = await Promise.all([
+      prisma.lore.count({ where }),
+      prisma.lore.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: offset,
+        take: limit,
+      }),
+    ]);
 
-    // Get paginated results
-    const loreDocs = await db
-      .collection(PROXIM8_COLLECTIONS.LORE)
-      .find(query)
-      .sort({ createdAt: -1 })
-      .skip(offset)
-      .limit(limit)
-      .toArray();
-
-    const lore = loreDocs.map((doc) => toLore(doc, doc._id.toString()));
+    const lore = loreRecords.map(toLoreResponse);
 
     return {
       lore,
@@ -188,59 +186,49 @@ export const claimLore = async (
 ): Promise<ClaimLoreResponse> => {
   try {
     console.log(`${LOG_PREFIX} Claiming lore:`, request.params.loreId);
-    const db = await getDb();
 
     // Get lore
-    const filter = idFilter(request.params.loreId);
-    if (!filter) {
-      throw new ApiError(404, 'Lore not found');
-    }
+    const lore = await prisma.lore.findUnique({
+      where: { id: request.params.loreId },
+    });
 
-    const loreDoc = await db
-      .collection(PROXIM8_COLLECTIONS.LORE)
-      .findOne(filter);
-    if (!loreDoc) {
+    if (!lore) {
       throw new ApiError(404, 'Lore not found');
     }
 
     // Check if already claimed
-    if (loreDoc.claimed) {
-      throw new ApiError(409, 'Lore already claimed');
+    if (lore.claimed) {
+      throw new ApiError(409, 'Lore has already been claimed');
     }
 
-    // TODO: Verify NFT ownership using NFT service
-    // For now, we'll assume ownership is verified
+    // TODO: Verify NFT ownership before allowing claim
+    // This would integrate with the NFT service to verify ownership
+    const walletAddress = request.body.walletAddress.toLowerCase();
+
+    const now = new Date();
 
     // Update lore as claimed
-    const now = new Date();
-    await db.collection(PROXIM8_COLLECTIONS.LORE).updateOne(filter, {
-      $set: {
+    const updatedLore = await prisma.lore.update({
+      where: { id: request.params.loreId },
+      data: {
         claimed: true,
-        claimedBy: request.body.walletAddress.toLowerCase(),
+        claimedBy: walletAddress,
         claimedAt: now,
         updatedAt: now,
       },
     });
 
-    // Get updated lore
-    const updatedDoc = await db
-      .collection(PROXIM8_COLLECTIONS.LORE)
-      .findOne(filter);
-    const updatedLore = toLore(updatedDoc, request.params.loreId);
+    console.log(`${LOG_PREFIX} Lore claimed:`, request.params.loreId);
 
-    // TODO: Calculate and distribute rewards
+    // TODO: Calculate and create rewards based on lore type/rarity
     const reward = {
       type: 'experience',
       amount: 100,
-      description: 'Lore discovery bonus',
+      description: 'Experience points for claiming lore',
     };
 
-    // TODO: Create notification for successful claim
-
-    console.log(`${LOG_PREFIX} Lore claimed by:`, request.body.walletAddress);
-
     return {
-      lore: updatedLore,
+      lore: toLoreResponse(updatedLore),
       reward,
     };
   } catch (error) {
@@ -250,23 +238,18 @@ export const claimLore = async (
 };
 
 /**
- * Update lore (admin function)
+ * Update lore entry
  */
 export const updateLore = async (request: UpdateLoreRequest): Promise<Lore> => {
   try {
     console.log(`${LOG_PREFIX} Updating lore:`, request.params.loreId);
-    const db = await getDb();
 
-    // Get existing lore
-    const filter = idFilter(request.params.loreId);
-    if (!filter) {
-      throw new ApiError(404, 'Lore not found');
-    }
+    // Check if lore exists
+    const existingLore = await prisma.lore.findUnique({
+      where: { id: request.params.loreId },
+    });
 
-    const existingDoc = await db
-      .collection(PROXIM8_COLLECTIONS.LORE)
-      .findOne(filter);
-    if (!existingDoc) {
+    if (!existingLore) {
       throw new ApiError(404, 'Lore not found');
     }
 
@@ -275,23 +258,29 @@ export const updateLore = async (request: UpdateLoreRequest): Promise<Lore> => {
       updatedAt: now,
     };
 
-    // Add fields that are being updated
-    if (request.body.title) updateData.title = request.body.title;
-    if (request.body.content) updateData.content = request.body.content;
-    if (request.body.background)
+    // Update only provided fields
+    if (request.body.title !== undefined) {
+      updateData.title = request.body.title;
+    }
+    if (request.body.content !== undefined) {
+      updateData.content = request.body.content;
+    }
+    if (request.body.background !== undefined) {
       updateData.background = request.body.background;
-    if (request.body.traits) updateData.traits = request.body.traits;
+    }
+    if (request.body.traits !== undefined) {
+      updateData.traits = request.body.traits;
+    }
 
     // Update lore
-    await db
-      .collection(PROXIM8_COLLECTIONS.LORE)
-      .updateOne(filter, { $set: updateData });
+    const updatedLore = await prisma.lore.update({
+      where: { id: request.params.loreId },
+      data: updateData,
+    });
 
-    // Get updated lore
-    const updatedDoc = await db
-      .collection(PROXIM8_COLLECTIONS.LORE)
-      .findOne(filter);
-    return toLore(updatedDoc, request.params.loreId);
+    console.log(`${LOG_PREFIX} Lore updated:`, request.params.loreId);
+
+    return toLoreResponse(updatedLore);
   } catch (error) {
     console.error(`${LOG_PREFIX} Error updating lore:`, error);
     throw ApiError.from(error, 500, ERROR_MESSAGES.INTERNAL_ERROR);
@@ -299,25 +288,31 @@ export const updateLore = async (request: UpdateLoreRequest): Promise<Lore> => {
 };
 
 /**
- * Delete lore (admin function)
+ * Delete lore entry
  */
 export const deleteLore = async (
   request: DeleteLoreRequest
 ): Promise<boolean> => {
   try {
     console.log(`${LOG_PREFIX} Deleting lore:`, request.params.loreId);
-    const db = await getDb();
 
-    const filter = idFilter(request.params.loreId);
-    if (!filter) {
+    // Check if lore exists
+    const existingLore = await prisma.lore.findUnique({
+      where: { id: request.params.loreId },
+    });
+
+    if (!existingLore) {
       throw new ApiError(404, 'Lore not found');
     }
 
-    const result = await db
-      .collection(PROXIM8_COLLECTIONS.LORE)
-      .deleteOne(filter);
+    // Delete lore
+    await prisma.lore.delete({
+      where: { id: request.params.loreId },
+    });
 
-    return result.deletedCount > 0;
+    console.log(`${LOG_PREFIX} Lore deleted:`, request.params.loreId);
+
+    return true;
   } catch (error) {
     console.error(`${LOG_PREFIX} Error deleting lore:`, error);
     throw ApiError.from(error, 500, ERROR_MESSAGES.INTERNAL_ERROR);
@@ -325,7 +320,7 @@ export const deleteLore = async (
 };
 
 /**
- * Get unclaimed lore available to a wallet
+ * Get unclaimed lore for user
  */
 export const getUnclaimedLore = async (
   request: GetUnclaimedLoreRequest,
@@ -333,32 +328,38 @@ export const getUnclaimedLore = async (
 ): Promise<LoreListResponse> => {
   try {
     console.log(`${LOG_PREFIX} Getting unclaimed lore`);
-    const db = await getDb();
 
     const limit = request.query?.limit || 20;
     const offset = request.query?.offset || 0;
 
-    // Build query for unclaimed lore
-    const query: any = { claimed: false };
+    // Determine wallet address to use
+    let targetWalletAddress: string | undefined;
+    if (walletAddress) {
+      targetWalletAddress = walletAddress;
+    } else if (request.query?.walletAddress) {
+      targetWalletAddress = request.query.walletAddress.toLowerCase();
+    }
 
-    // TODO: If walletAddress provided, filter by NFTs owned by this wallet
+    const where: any = {
+      claimed: false,
+    };
+
+    // If wallet address provided, we could filter by NFTs owned by this wallet
+    // This would require joining with NFT ownership data
     // For now, return all unclaimed lore
 
-    // Get total count
-    const total = await db
-      .collection(PROXIM8_COLLECTIONS.LORE)
-      .countDocuments(query);
+    // Get total count and paginated results in parallel
+    const [total, loreRecords] = await Promise.all([
+      prisma.lore.count({ where }),
+      prisma.lore.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: offset,
+        take: limit,
+      }),
+    ]);
 
-    // Get paginated results
-    const loreDocs = await db
-      .collection(PROXIM8_COLLECTIONS.LORE)
-      .find(query)
-      .sort({ createdAt: -1 })
-      .skip(offset)
-      .limit(limit)
-      .toArray();
-
-    const lore = loreDocs.map((doc) => toLore(doc, doc._id.toString()));
+    const lore = loreRecords.map(toLoreResponse);
 
     return {
       lore,
@@ -372,7 +373,7 @@ export const getUnclaimedLore = async (
 };
 
 /**
- * Get lore claimed by a wallet
+ * Get claimed lore by user
  */
 export const getClaimedLore = async (
   request: GetClaimedLoreRequest
@@ -382,32 +383,27 @@ export const getClaimedLore = async (
       `${LOG_PREFIX} Getting claimed lore for:`,
       request.query.walletAddress
     );
-    const db = await getDb();
 
     const limit = request.query?.limit || 20;
     const offset = request.query?.offset || 0;
 
-    // Build query for claimed lore by this wallet
-    const query = {
+    const where = {
       claimed: true,
       claimedBy: request.query.walletAddress.toLowerCase(),
     };
 
-    // Get total count
-    const total = await db
-      .collection(PROXIM8_COLLECTIONS.LORE)
-      .countDocuments(query);
+    // Get total count and paginated results in parallel
+    const [total, loreRecords] = await Promise.all([
+      prisma.lore.count({ where }),
+      prisma.lore.findMany({
+        where,
+        orderBy: { claimedAt: 'desc' },
+        skip: offset,
+        take: limit,
+      }),
+    ]);
 
-    // Get paginated results
-    const loreDocs = await db
-      .collection(PROXIM8_COLLECTIONS.LORE)
-      .find(query)
-      .sort({ claimedAt: -1 })
-      .skip(offset)
-      .limit(limit)
-      .toArray();
-
-    const lore = loreDocs.map((doc) => toLore(doc, doc._id.toString()));
+    const lore = loreRecords.map(toLoreResponse);
 
     return {
       lore,
@@ -428,42 +424,33 @@ export const getLoreStats = async (
 ): Promise<LoreStatsResponse> => {
   try {
     console.log(`${LOG_PREFIX} Getting lore stats`);
-    const db = await getDb();
 
-    // Get total count
-    const total = await db
-      .collection(PROXIM8_COLLECTIONS.LORE)
-      .countDocuments({});
+    // Get total and claimed counts in parallel
+    const [total, claimed] = await Promise.all([
+      prisma.lore.count(),
+      prisma.lore.count({ where: { claimed: true } }),
+    ]);
 
-    // Get claimed count
-    const claimed = await db
-      .collection(PROXIM8_COLLECTIONS.LORE)
-      .countDocuments({ claimed: true });
-
-    // Calculate unclaimed
     const unclaimed = total - claimed;
 
-    let claimedByUser: number | undefined;
+    let claimedByUser = 0;
     if (walletAddress) {
-      claimedByUser = await db
-        .collection(PROXIM8_COLLECTIONS.LORE)
-        .countDocuments({
+      claimedByUser = await prisma.lore.count({
+        where: {
           claimed: true,
           claimedBy: walletAddress.toLowerCase(),
-        });
+        },
+      });
     }
 
     return {
       total,
       claimed,
       unclaimed,
-      claimedByUser,
+      claimedByUser: walletAddress ? claimedByUser : undefined,
     };
   } catch (error) {
     console.error(`${LOG_PREFIX} Error getting lore stats:`, error);
     throw ApiError.from(error, 500, ERROR_MESSAGES.INTERNAL_ERROR);
   }
 };
-
-// Export collection constants
-export { PROXIM8_COLLECTIONS };
