@@ -1,0 +1,108 @@
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile.dev
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./apps/server/src:/app/apps/server/src
+      - ./apps/server/prisma:/app/apps/server/prisma
+      - ./packages:/app/packages
+      - ./apps/server/uploads:/app/apps/server/uploads
+      - ./apps/server/temp:/app/apps/server/temp
+      - ./apps/server/logs:/app/apps/server/logs
+    environment:
+      - NODE_ENV=development
+      - PORT=4000
+      - DATABASE_URL=mongodb://mongo:27017/project89_dev
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=debug
+      - JWT_SECRET=dev-jwt-secret-change-in-production
+      - API_KEY_ENCRYPTION_KEY=dev-encryption-key-32-chars-long
+      - API_KEY_ENCRYPTION_IV=dev-encryption-iv-16chars
+      # Core server environment variables
+      - RATE_LIMIT_DISABLED=true
+      - IP_RATE_LIMIT_DISABLED=true
+      - FINGERPRINT_RATE_LIMIT_DISABLED=true
+      - BYPASS_ROLE_CHECK=true
+      - ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:5000
+      # Proxim8 environment variables
+      - OPENAI_API_KEY=your-openai-api-key-here
+      - GOOGLE_AI_API_KEY=your-google-ai-key-here
+      - HELIUS_API_KEY=your-helius-key-here
+    depends_on:
+      - mongo
+      - redis
+    networks:
+      - project89-network
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7
+    ports:
+      - "27019:27017"
+    volumes:
+      - mongo-data:/data/db
+      - ./scripts/mongo-init:/docker-entrypoint-initdb.d
+    environment:
+      - MONGO_INITDB_DATABASE=project89_dev
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=dev-password
+    networks:
+      - project89-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6381:6379"
+    command: redis-server --appendonly yes --requirepass dev-redis-password
+    volumes:
+      - redis-data:/data
+    networks:
+      - project89-network
+    restart: unless-stopped
+
+  # Optional: MongoDB admin interface
+  mongo-express:
+    image: mongo-express:1.0.0
+    ports:
+      - "8083:8081"
+    environment:
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=admin
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=dev-password
+      - ME_CONFIG_MONGODB_SERVER=mongo
+      - ME_CONFIG_MONGODB_PORT=27017
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=dev-admin
+    depends_on:
+      - mongo
+    networks:
+      - project89-network
+    restart: unless-stopped
+
+  # Optional: Redis admin interface
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    ports:
+      - "8084:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379:0:dev-redis-password
+      - HTTP_USER=admin
+      - HTTP_PASSWORD=dev-admin
+    depends_on:
+      - redis
+    networks:
+      - project89-network
+    restart: unless-stopped
+
+volumes:
+  mongo-data:
+  redis-data:
+
+networks:
+  project89-network:
+    driver: bridge 

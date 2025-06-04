@@ -1,0 +1,43 @@
+FROM node:20-slim
+
+# Install system dependencies  
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libvips-dev \
+    python3 \
+    openssl \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install package managers
+RUN npm install -g pnpm@8.10.0 turbo
+
+# Set working directory
+WORKDIR /app
+
+# Copy workspace configuration
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+
+# Copy package.json files
+COPY apps/server/package.json ./apps/server/
+COPY packages/*/package.json ./packages/*/
+
+# Install dependencies
+RUN pnpm install
+
+# Copy source code
+COPY packages ./packages
+COPY apps/server ./apps/server
+
+# Generate Prisma client
+WORKDIR /app/apps/server
+RUN pnpm prisma generate
+
+# Expose port
+EXPOSE 4000
+
+# Set working directory for development
+WORKDIR /app/apps/server
+
+# Development command
+CMD ["pnpm", "run", "dev"] 

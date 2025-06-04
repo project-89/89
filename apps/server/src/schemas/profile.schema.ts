@@ -1,6 +1,7 @@
-import { z } from "zod";
+import { z } from 'zod';
 
-import { StatsResponseSchema, ContactInfoSchema, PreferencesSchema } from ".";
+import { ContactInfoSchema, PreferencesSchema } from './common.schema';
+import { StatsResponseSchema } from './stats.schema';
 
 // Request Validation Schemas
 export const ProfileCreateSchema = z.object({
@@ -81,7 +82,9 @@ export const ProfileWithStatsResponseSchema = ProfileResponseSchema.extend({
 // Export inferred types
 export type ProfileCreateRequest = z.infer<typeof ProfileCreateSchema>;
 export type ProfileGetRequest = z.infer<typeof ProfileGetSchema>;
-export type ProfileGetByWalletRequest = z.infer<typeof ProfileGetByWalletSchema>;
+export type ProfileGetByWalletRequest = z.infer<
+  typeof ProfileGetByWalletSchema
+>;
 export type ProfileUpdateRequest = z.infer<typeof ProfileUpdateSchema>;
 export type ProfileSearchRequest = z.infer<typeof ProfileSearchSchema>;
 
@@ -90,4 +93,6 @@ export type Profile = z.infer<typeof ProfileSchema>;
 
 // API Response Types
 export type ProfileResponse = z.infer<typeof ProfileResponseSchema>;
-export type ProfileWithStatsResponse = z.infer<typeof ProfileWithStatsResponseSchema>;
+export type ProfileWithStatsResponse = z.infer<
+  typeof ProfileWithStatsResponseSchema
+>;

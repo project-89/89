@@ -10,7 +10,7 @@ import {
   HEALTH_RATE_LIMIT_CONFIG,
   initializeRateLimits,
 } from './constants/config/limits';
-import { initializeMCPSystem } from './mcp.system';
+// import { initializeMCPSystem } from './mcp.system';
 import { ipRateLimit, withMetrics } from './middleware';
 import { errorHandler } from './middleware/error.middleware';
 import router from './routes';
@@ -153,11 +153,10 @@ const server = http.createServer(app);
 // Start the server
 async function startServer() {
   try {
-    // Initialize databases
-    await initDatabases();
+    // Database is already initialized at module level - no need to initialize again
 
     // Initialize the MCP system
-    await initializeMCPSystem();
+    // await initializeMCPSystem();
 
     // Setup scheduled tasks
     setupScheduledTasks();
