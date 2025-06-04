@@ -76,10 +76,31 @@ typings/
 .env.test.local
 .env.production.local
 
+# Environment files - comprehensive patterns
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.local.example
+
 # Environment files in src/env directories
 **/src/env/.env
 **/src/env/.env.*
 !**/src/env/.env.example
+
+# Specific environment files that should never be committed
+apps/proxim8-server/.env
+apps/proxim8-server/.env.prod
+apps/proxim8-server/.env.dev
+apps/proxim8-server/.env.production
+apps/proxim8-server/.env.development
+apps/server/.env
+apps/server/.env.*
+apps/server/src/env/.env.development
+apps/server/src/env/.env.production
+apps/server/src/env/.env.test
+apps/proxim8-portal/.env
+apps/proxim8-portal/.env.*
+apps/proxim8-portal/src/env/.env.*
 
 # parcel-bundler cache files
 .cache
