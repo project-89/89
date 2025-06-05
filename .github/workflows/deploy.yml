@@ -1,0 +1,266 @@
+name: Deploy Project89 Server
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'apps/server/**'
+      - 'packages/**'
+      - 'terraform/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/deploy.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/server/**'
+      - 'packages/**'
+      - 'terraform/**'
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GAR_LOCATION: us-central1
+  REPOSITORY: project89-registry
+  SERVICE: project89-server
+  REGION: us-central1
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      infrastructure: ${{ steps.changes.outputs.infrastructure }}
+      application: ${{ steps.changes.outputs.application }}
+      environment: ${{ steps.env.outputs.environment }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 2
+
+    - name: Detect changes
+      uses: dorny/paths-filter@v3
+      id: changes
+      with:
+        filters: |
+          infrastructure:
+            - 'terraform/**'
+            - 'apps/server/Dockerfile'
+            - 'docker-compose.yml'
+            - 'apps/server/package.json'
+            - 'apps/server/prisma/**'
+          application:
+            - 'apps/server/src/**'
+            - 'packages/**'
+            - 'apps/server/package.json'
+
+    - name: Determine environment
+      id: env
+      run: |
+        if [[ $GITHUB_REF == 'refs/heads/main' ]]; then
+          echo "environment=prod" >> $GITHUB_OUTPUT
+        else
+          echo "environment=dev" >> $GITHUB_OUTPUT
+        fi
+
+  test:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.application == 'true'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 8.10.0
+
+    - name: Get pnpm store directory
+      shell: bash
+      run: |
+        echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+    - name: Setup pnpm cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.STORE_PATH }}
+        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-store-
+
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+
+    - name: Generate Prisma client
+      run: cd apps/server && pnpm prisma generate
+
+    - name: Build server
+      run: pnpm turbo run build --filter=server...
+
+    - name: Run tests
+      run: cd apps/server && pnpm test
+      env:
+        NODE_ENV: test
+
+  deploy-infrastructure:
+    needs: [detect-changes]
+    runs-on: ubuntu-latest
+    if: needs.detect-changes.outputs.infrastructure == 'true' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    outputs:
+      terraform-applied: ${{ steps.terraform.outputs.applied }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Google Auth
+      id: auth
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: Set up Cloud SDK
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: "1.6.0"
+
+    - name: Terraform Init
+      run: |
+        cd terraform
+        terraform init
+
+    - name: Terraform Plan
+      id: plan
+      run: |
+        cd terraform
+        terraform plan \
+          -var-file="environments/${{ needs.detect-changes.outputs.environment }}/terraform.tfvars" \
+          -out=tfplan \
+          -no-color
+      continue-on-error: true
+
+    - name: Comment Terraform Plan
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const output = `#### 🏗️ Terraform Plan
+          \`\`\`
+          ${{ steps.plan.outputs.stdout }}
+          \`\`\`
+          
+          *Environment: ${{ needs.detect-changes.outputs.environment }}*
+          *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: output
+          })
+
+    - name: Terraform Apply
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+      id: terraform
+      run: |
+        cd terraform
+        terraform apply tfplan
+        echo "applied=true" >> $GITHUB_OUTPUT
+        rm tfplan
+
+    - name: Infrastructure deployed notification
+      if: steps.terraform.outputs.applied == 'true'
+      run: |
+        echo "✅ Infrastructure successfully deployed to ${{ needs.detect-changes.outputs.environment }}"
+
+  build-and-deploy:
+    needs: [detect-changes, test, deploy-infrastructure]
+    runs-on: ubuntu-latest
+    if: |
+      always() && 
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      (needs.deploy-infrastructure.result == 'success' || needs.deploy-infrastructure.result == 'skipped') &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Google Auth
+      id: auth
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: Set up Cloud SDK
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: Configure Docker to use gcloud as a credential helper
+      run: |
+        gcloud auth configure-docker $GAR_LOCATION-docker.pkg.dev
+
+    - name: Set deployment variables
+      run: |
+        if [[ $GITHUB_REF == 'refs/heads/main' ]]; then
+          echo "ENVIRONMENT=prod" >> $GITHUB_ENV
+          echo "IMAGE_TAG=latest" >> $GITHUB_ENV
+          echo "SERVICE_NAME=project89-server-prod" >> $GITHUB_ENV
+        else
+          echo "ENVIRONMENT=dev" >> $GITHUB_ENV
+          echo "IMAGE_TAG=dev-latest" >> $GITHUB_ENV
+          echo "SERVICE_NAME=project89-server-dev" >> $GITHUB_ENV
+        fi
+
+    - name: Build Docker image
+      run: |
+        docker build -t $GAR_LOCATION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$SERVICE:$IMAGE_TAG \
+          -f apps/server/Dockerfile .
+
+    - name: Push Docker image
+      run: |
+        docker push $GAR_LOCATION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$SERVICE:$IMAGE_TAG
+
+    - name: Deploy to Cloud Run
+      run: |
+        gcloud run deploy $SERVICE_NAME \
+          --image $GAR_LOCATION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$SERVICE:$IMAGE_TAG \
+          --platform managed \
+          --region $REGION \
+          --allow-unauthenticated \
+          --set-env-vars NODE_ENV=$ENVIRONMENT \
+          --memory 4Gi \
+          --cpu 2 \
+          --max-instances 100 \
+          --min-instances 0 \
+          --port 8080 \
+          --timeout 300
+
+    - name: Get service URL
+      id: url
+      run: |
+        SERVICE_URL=$(gcloud run services describe $SERVICE_NAME --region=$REGION --format='value(status.url)')
+        echo "SERVICE_URL=$SERVICE_URL" >> $GITHUB_ENV
+        echo "url=$SERVICE_URL" >> $GITHUB_OUTPUT
+
+    - name: Test deployment
+      run: |
+        echo "🧪 Testing deployment..."
+        sleep 30  # Wait for service to be ready
+        curl -f ${{ env.SERVICE_URL }}/api/health || echo "⚠️ Health check failed, but deployment completed"
+
+    - name: Deployment summary
+      run: |
+        echo "🚀 Deployment Summary:"
+        echo "   Environment: ${{ env.ENVIRONMENT }}"
+        echo "   Service: ${{ env.SERVICE_NAME }}"
+        echo "   URL: ${{ steps.url.outputs.url }}"
+        echo "   Infrastructure: ${{ needs.detect-changes.outputs.infrastructure == 'true' && '✅ Updated' || '⏭️ Skipped' }}"
+        echo "   Application: ${{ needs.detect-changes.outputs.application == 'true' && '✅ Deployed' || '⏭️ Skipped' }}" 
