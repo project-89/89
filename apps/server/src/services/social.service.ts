@@ -2,6 +2,7 @@ import { COLLECTIONS, ERROR_MESSAGES, TAG_LIMITS } from "../constants";
 import { AnonUser, FindAnonUserParams, DiscoveryInfo, SocialPlatform } from "../schemas";
 import { hashSocialIdentity, ApiError } from "../utils";
 import { getDb, formatDocument } from "../utils/mongodb";
+import { randomUUID } from "crypto";
 
 const LOG_PREFIX = "[Social Service]";
 
@@ -167,7 +168,7 @@ export const createAnonUser = async ({
     });
 
     const userWithId = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       ...userData,
     };
 

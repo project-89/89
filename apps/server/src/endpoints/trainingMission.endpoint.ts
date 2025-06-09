@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Response, Request } from 'express';
 import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants';
 import {
   AIService,

@@ -39,6 +39,16 @@ export const protectedEndpoint = (schema?: ZodSchema) => {
   return chain;
 };
 
+// For endpoints that need authentication but ZenStack handles authorization
+export const authenticatedEndpoint = (schema?: ZodSchema) => {
+  const chain: RequestHandler[] = [
+    withMetrics(validateAuthToken, "authValidation"),
+    // No ownership verification - ZenStack handles it
+  ];
+  if (schema) chain.push(withMetrics(validateRequest(schema), "schemaValidation"));
+  return chain;
+};
+
 // For agent-only endpoints
 export const agentEndpoint = (schema?: ZodSchema) => {
   const chain: RequestHandler[] = [withMetrics(verifyAgent, "agentVerification")];

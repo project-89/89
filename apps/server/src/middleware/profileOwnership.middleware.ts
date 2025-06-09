@@ -1,9 +1,9 @@
-import { Request, Response, NextFunction } from "express";
-import { ApiError, sendError } from "../utils";
-import { ERROR_MESSAGES } from "../constants";
-import { getProfile } from "../services";
+import { NextFunction, Response, Request } from 'express';
+import { ERROR_MESSAGES } from '../constants';
+import { getProfile } from '../services';
+import { ApiError, sendError } from '../utils';
 
-const LOG_PREFIX = "[Profile Access Check]";
+const LOG_PREFIX = '[Profile Access Check]';
 
 /**
  * Middleware to verify profile access
@@ -13,16 +13,16 @@ const LOG_PREFIX = "[Profile Access Check]";
 export const verifyProfileAccess = async (
   req: Request,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ): Promise<void | Response> => {
   try {
     // Skip OPTIONS requests
-    if (req.method === "OPTIONS") {
+    if (req.method === 'OPTIONS') {
       console.log(`${LOG_PREFIX} Skipping OPTIONS request`);
       return next();
     }
 
-    const callerFingerprintId = req.auth?.fingerprint.id;
+    const callerFingerprintId = req.auth?.fingerprint?.id;
     const profileId = req.params.profileId || req.params.id;
 
     console.log(`${LOG_PREFIX} Checking profile access:`, {

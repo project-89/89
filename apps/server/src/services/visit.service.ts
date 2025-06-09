@@ -1,6 +1,7 @@
 import { ApiError, extractDomain } from "../utils";
 import { updatePresence } from ".";
 import { ERROR_MESSAGES, COLLECTIONS } from "../constants";
+import { ObjectId } from "mongodb";
 import {
   SiteResponse,
   VisitPresence,
@@ -89,11 +90,17 @@ export const logVisit = async ({
       siteResponse = {
         ...site,
         id: siteId,
+        fingerprintId,
+        domain,
         lastVisited: now.getTime(),
         createdAt: site.createdAt instanceof Date ? site.createdAt.getTime() : site.createdAt,
         updatedAt: now.getTime(),
         visits: updatedVisits,
         title: title || domain,
+        settings: site.settings || {
+          notifications: true,
+          privacy: 'public' as const,
+        },
       };
     }
 
@@ -240,7 +247,7 @@ export const getVisitHistory = async ({
       .map((id) => {
         if (typeof id === "string") {
           try {
-            return idFilter(id);
+            return new ObjectId(id);
           } catch (error) {
             console.warn(`${LOG_PREFIX} Invalid ObjectId: ${id}`);
             return null;
@@ -248,7 +255,7 @@ export const getVisitHistory = async ({
         }
         return null;
       })
-      .filter((id) => id !== null);
+      .filter((id) => id !== null) as ObjectId[];
 
     // Fetch all sites in a single query
     const sites = await db
@@ -259,15 +266,15 @@ export const getVisitHistory = async ({
     // Create a map of site ID to site data for quick lookup
     const siteMap = new Map();
     sites.forEach((site) => {
+      const { _id, ...siteWithoutId } = site;
       const formattedSite = {
-        ...site,
-        id: site._id.toString(),
+        ...siteWithoutId,
+        id: _id.toString(),
         lastVisited:
           site.lastVisited instanceof Date ? site.lastVisited.getTime() : site.lastVisited,
         createdAt: site.createdAt instanceof Date ? site.createdAt.getTime() : site.createdAt,
         updatedAt: site.updatedAt instanceof Date ? site.updatedAt.getTime() : undefined,
       };
-      delete formattedSite._id;
       siteMap.set(formattedSite.id, formattedSite);
     });
 

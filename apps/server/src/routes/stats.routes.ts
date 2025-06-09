@@ -1,11 +1,14 @@
 import { Router } from "express";
-import { publicEndpoint } from "../middleware/chains.middleware";
-import { StatsGetSchema } from "../schemas";
-import { handleGetStats } from "../endpoints";
 
 const router = Router();
 
-// Stats are public information about user achievements and activity
-router.get("/stats/:id", ...publicEndpoint(StatsGetSchema), handleGetStats);
+/**
+ * MIGRATED: Removed CRUD routes
+ * 
+ * DELETED ROUTES - Use auto-CRUD instead:
+ * - GET /stats/:id → GET /api/model/userStats/:id
+ * 
+ * ALL routes were CRUD - this file can be deleted
+ */
 
 export default router;

@@ -167,6 +167,17 @@ export function useNFTs(initialData: NFTMetadata[] = []) {
   const isAuthenticated = store.isAuthenticated;
   const isConnected = store.connected; // Or more accurately, store.isAuthenticated for app-level auth
 
+  // Debug logging to identify the mobile auth state issue (remove in production)
+  // console.log("[useNFTs] Hook state debug:", {
+  //   walletAddress,
+  //   isAuthenticated,
+  //   isConnected,
+  //   user: store.user,
+  //   platform: store.platform,
+  //   hasUser: !!store.user,
+  //   queryEnabled: !!walletAddress && isAuthenticated,
+  // });
+
   const result = useQuery({
     queryKey: NFT_KEYS.walletList(walletAddress || undefined),
     queryFn: async () => {
@@ -215,7 +226,8 @@ export function useNFTs(initialData: NFTMetadata[] = []) {
     error: result.error ? (result.error as ApiError).message : null, // Ensure error is string or null
     refetch: result.refetch,
     // Provide the connection status from our new store
-    connected: isAuthenticated, // App considers user "connected" for NFTs if authenticated
+    // Use both connected AND authenticated for better compatibility
+    connected: isConnected && isAuthenticated, // More robust connection check
     publicKey: walletAddress, // This is the wallet address string
     // Include other React Query properties that don't conflict with our custom ones
     isSuccess: result.isSuccess,

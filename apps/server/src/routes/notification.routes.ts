@@ -1,9 +1,6 @@
 import { Router } from 'express';
 import {
   handleBulkCreateNotifications,
-  handleCreateNotification,
-  handleDeleteNotification,
-  handleGetNotification,
   handleGetNotificationStats,
   handleGetUserNotifications,
   handleMarkAllNotificationsRead,
@@ -15,9 +12,6 @@ import {
 } from '../middleware/proxim8Chains.middleware';
 import {
   BulkCreateNotificationsRequestSchema,
-  CreateNotificationRequestSchema,
-  DeleteNotificationRequestSchema,
-  GetNotificationRequestSchema,
   GetUserNotificationsRequestSchema,
   MarkAllNotificationsReadRequestSchema,
   MarkNotificationReadRequestSchema,
@@ -26,24 +20,15 @@ import {
 const router = Router();
 
 /**
- * Create a new notification
- * Admin/system endpoint for creating notifications
+ * MIGRATED: Removed CRUD routes
+ * 
+ * DELETED ROUTES - Use auto-CRUD instead:
+ * - POST /notifications → POST /api/model/notification
+ * - GET /notifications/:id → GET /api/model/notification/:id
+ * - DELETE /notifications/:id → DELETE /api/model/notification/:id
+ * 
+ * KEPT: Business logic routes only
  */
-router.post(
-  '/notifications',
-  ...proxim8SystemEndpoint(CreateNotificationRequestSchema),
-  handleCreateNotification
-);
-
-/**
- * Get notification by ID
- * Requires authentication and ownership verification
- */
-router.get(
-  '/notifications/:notificationId',
-  ...proxim8AuthenticatedEndpoint(GetNotificationRequestSchema),
-  handleGetNotification
-);
 
 /**
  * Get user notifications with pagination and filtering
@@ -73,16 +58,6 @@ router.post(
   '/notifications/mark-all-read',
   ...proxim8AuthenticatedEndpoint(MarkAllNotificationsReadRequestSchema),
   handleMarkAllNotificationsRead
-);
-
-/**
- * Delete notification
- * Requires authentication and ownership verification
- */
-router.delete(
-  '/notifications/:notificationId',
-  ...proxim8AuthenticatedEndpoint(DeleteNotificationRequestSchema),
-  handleDeleteNotification
 );
 
 /**

@@ -10,6 +10,7 @@ import {
 import { getFingerprintById } from "./fingerprint.service";
 import { hashSocialIdentity } from "../utils/hash";
 import { getDb, formatDocument } from "../utils/mongodb";
+import { randomUUID } from "crypto";
 
 const LOG_PREFIX = "[Onboarding Service]";
 
@@ -77,7 +78,7 @@ export const startOnboarding = async (
     };
 
     const onboardingWithId = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       ...onboarding,
     };
 
@@ -100,7 +101,7 @@ export const verifyMission = async (request: VerifyMissionRequest): Promise<Onbo
       throw new ApiError(404, ERROR_MESSAGES.ONBOARDING_NOT_FOUND);
     }
 
-    const onboarding = onboardingDoc as OnboardingProgress;
+    const onboarding = formatDocument(onboardingDoc) as OnboardingProgress;
 
     if (onboarding.stage === "hivemind_connected") {
       throw new ApiError(400, ERROR_MESSAGES.ONBOARDING_ALREADY_COMPLETED);
@@ -181,7 +182,7 @@ export const verifyMission = async (request: VerifyMissionRequest): Promise<Onbo
       } else {
         // Create new user
         const anonUser = {
-          id: crypto.randomUUID(),
+          id: randomUUID(),
           identity: {
             platform: socialProof.platform,
             hashedUsername,

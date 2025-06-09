@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletAuth } from "@/stores/walletAuthStore";
 import { useNftStore } from "@/stores/nftStore";
 import NFTImage from "@/components/common/NFTImage";
@@ -15,7 +14,9 @@ import {
   claimLore,
   getClaimedLoreByNftId,
   getAvailableLoreByNftId,
+  getClaimableMissionLore,
 } from "@/services/lore";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 interface AgentClientProps {
   agentId: string;
@@ -23,8 +24,8 @@ interface AgentClientProps {
 
 export default function AgentClient({ agentId }: AgentClientProps) {
   const router = useRouter();
-  const { publicKey } = useWallet();
-  const { isAuthenticated } = useWalletAuth();
+  const { track } = useAnalytics();
+  const { walletAddress, connected, isAuthenticated } = useWalletAuth();
   const [backgroundNumber] = useState(() => Math.floor(Math.random() * 19) + 1);
   const [activeTab, setActiveTab] = useState<
     "overview" | "lore" | "attributes"
@@ -32,10 +33,12 @@ export default function AgentClient({ agentId }: AgentClientProps) {
 
   // Lore state
   const [lore, setLore] = useState<Lore[] | null>(null);
+  const [missionLore, setMissionLore] = useState<Lore[]>([]);
   const [hasUnclaimedLore, setHasUnclaimedLore] = useState(false);
   const [loreLoading, setLoreLoading] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const [claimedLore, setClaimedLore] = useState<Lore | null>(null);
+  const [selectedLore, setSelectedLore] = useState<Lore | null>(null);
   const [showLoreModal, setShowLoreModal] = useState(false);
   const [showRevealModal, setShowRevealModal] = useState(false);
 
@@ -59,16 +62,32 @@ export default function AgentClient({ agentId }: AgentClientProps) {
 
       setLoreLoading(true);
       try {
-        const [claimedLoreData, availabilityData] = await Promise.all([
+        const [claimedLoreData, availabilityData, claimableMissionLoreData] = await Promise.all([
           getClaimedLoreByNftId(agent.tokenId),
           getAvailableLoreByNftId(agent.tokenId),
+          getClaimableMissionLore(agent.tokenId),
         ]);
 
-        setLore(claimedLoreData.length > 0 ? claimedLoreData : null);
-        setHasUnclaimedLore(availabilityData.hasUnclaimedLore);
+        // Separate mission lore from other lore
+        const allClaimedLore = claimedLoreData || [];
+        const missionLoreItems = allClaimedLore.filter(l => 
+          (l as any).sourceType === 'mission' || 
+          (l as any).metadata?.missionId
+        );
+        const otherLore = allClaimedLore.filter(l => 
+          !((l as any).sourceType === 'mission' || (l as any).metadata?.missionId)
+        );
+
+        setLore(otherLore.length > 0 ? otherLore : null);
+        setMissionLore(missionLoreItems);
+        
+        // Check if there's unclaimed lore (including mission lore)
+        const hasUnclaimedMissionLore = Array.isArray(claimableMissionLoreData) && claimableMissionLoreData.length > 0;
+        setHasUnclaimedLore(availabilityData.hasUnclaimedLore || hasUnclaimedMissionLore);
       } catch (error) {
         console.error("Error fetching lore:", error);
         setLore(null);
+        setMissionLore([]);
         setHasUnclaimedLore(false);
       } finally {
         setLoreLoading(false);
@@ -80,7 +99,13 @@ export default function AgentClient({ agentId }: AgentClientProps) {
 
   // Handle claiming lore
   const handleClaimLore = async () => {
-    if (!publicKey || !agent?.tokenId) return;
+    if (!walletAddress || !agent?.tokenId) return;
+
+    track('agent_lore_claim_started', {
+      agent_id: agentId,
+      nft_id: agent.tokenId,
+      agent_name: agent.name
+    });
 
     try {
       setClaiming(true);
@@ -92,11 +117,43 @@ export default function AgentClient({ agentId }: AgentClientProps) {
       // Refresh availability
       const availabilityData = await getAvailableLoreByNftId(agent.tokenId);
       setHasUnclaimedLore(availabilityData.hasUnclaimedLore);
+      
+      track('agent_lore_claim_success', {
+        agent_id: agentId,
+        lore_id: newLore.id,
+        lore_type: 'type' in newLore ? newLore.type : 'unknown',
+        lore_title: newLore.title
+      });
     } catch (error) {
       console.error("Error claiming lore:", error);
+      track('agent_lore_claim_error', {
+        agent_id: agentId,
+        error_message: error instanceof Error ? error.message : 'Unknown error'
+      });
     } finally {
       setClaiming(false);
     }
+  };
+
+  // Handle lore card click to open modal
+  const handleLoreClick = (loreItem: Lore) => {
+    track('agent_lore_card_clicked', {
+      agent_id: agentId,
+      lore_id: loreItem.id,
+      lore_type: 'type' in loreItem ? loreItem.type : 'unknown'
+    });
+    setSelectedLore(loreItem);
+    setShowLoreModal(true);
+  };
+
+  // Close lore modal
+  const closeLoreModal = () => {
+    track('agent_lore_modal_closed', {
+      agent_id: agentId,
+      lore_id: selectedLore?.id
+    });
+    setShowLoreModal(false);
+    setSelectedLore(null);
   };
 
   if (!agent) {
@@ -170,7 +227,10 @@ export default function AgentClient({ agentId }: AgentClientProps) {
               
               {/* Back to Agents Button */}
               <button
-                onClick={() => router.push("/my-proxim8s")}
+                onClick={() => {
+                  track('back_to_agents_clicked', { from_agent_id: agentId });
+                  router.push("/my-proxim8s");
+                }}
                 className="flex items-center gap-2 px-4 py-2 bg-gray-800/80 hover:bg-gray-700/80 text-gray-300 hover:text-white rounded-lg transition-colors"
               >
                 <svg
@@ -253,7 +313,10 @@ export default function AgentClient({ agentId }: AgentClientProps) {
                       (attr) => attr.trait_type?.toLowerCase() !== "personality"
                     ).length > 6 && (
                       <button
-                        onClick={() => setActiveTab("attributes")}
+                        onClick={() => {
+                          track('view_all_attributes_clicked', { agent_id: agentId });
+                          setActiveTab("attributes");
+                        }}
                         className="font-space-mono text-xs text-primary-500 hover:text-primary-400 transition-colors"
                       >
                         VIEW ALL ({agent.attributes.length} TOTAL) →
@@ -284,7 +347,14 @@ export default function AgentClient({ agentId }: AgentClientProps) {
                   ].map((tab) => (
                     <button
                       key={tab.id}
-                      onClick={() => setActiveTab(tab.id as any)}
+                      onClick={() => {
+                        track('agent_tab_clicked', {
+                          agent_id: agentId,
+                          tab_name: tab.id,
+                          from_tab: activeTab
+                        });
+                        setActiveTab(tab.id as any);
+                      }}
                       className={`flex-1 font-space-mono text-sm py-4 px-4 transition-all relative ${
                         activeTab === tab.id
                           ? `bg-gray-800/50 text-${tab.color}-500 border-b-2 border-${tab.color}-500`
@@ -330,16 +400,49 @@ export default function AgentClient({ agentId }: AgentClientProps) {
                         </div>
                       </div>
 
-                      {/* Mission History - Coming Soon */}
+                      {/* Mission History */}
                       <div>
-                        <h3 className="font-orbitron text-lg font-bold text-gray-500 mb-4">
+                        <h3 className="font-orbitron text-lg font-bold text-primary-500 mb-4">
                           MISSION HISTORY
                         </h3>
-                        <div className="bg-black/40 border border-gray-700/30 rounded-lg p-6 opacity-60">
-                          <p className="font-space-mono text-sm text-gray-600 text-center">
-                            MISSION SYSTEM COMING SOON
-                          </p>
-                        </div>
+                        {missionLore.length > 0 ? (
+                          <div className="space-y-3">
+                            {missionLore.map((mission) => (
+                              <div 
+                                key={mission.id} 
+                                className="bg-black/40 border border-gray-700/30 rounded-lg p-4 hover:border-gray-600/50 transition-colors cursor-pointer"
+                                onClick={() => handleLoreClick(mission)}
+                              >
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <h4 className="font-orbitron text-sm font-bold text-green-400">
+                                      {(mission as any).metadata?.missionName || mission.title || "CLASSIFIED MISSION"}
+                                    </h4>
+                                    <p className="font-space-mono text-xs text-gray-400 mt-1">
+                                      {new Date(mission.createdAt || '').toLocaleDateString()}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {mission.claimedBy ? (
+                                      <span className="font-space-mono text-xs text-purple-400">REPORT CLAIMED</span>
+                                    ) : (
+                                      <span className="font-space-mono text-xs text-green-400 animate-pulse">NEW REPORT</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="bg-black/40 border border-gray-700/30 rounded-lg p-6">
+                            <p className="font-space-mono text-sm text-gray-500 text-center">
+                              NO MISSIONS COMPLETED YET
+                            </p>
+                            <p className="font-space-mono text-xs text-gray-600 text-center mt-2">
+                              Deploy this agent on training missions to build their experience
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -376,11 +479,51 @@ export default function AgentClient({ agentId }: AgentClientProps) {
                             ACCESSING MEMORIES...
                           </p>
                         </div>
-                      ) : lore && lore.length > 0 ? (
-                        <div className="grid grid-cols-1 gap-4">
-                          {lore.map((loreItem) => (
-                            <LoreCard key={loreItem.id} lore={loreItem} />
-                          ))}
+                      ) : (lore && lore.length > 0) || missionLore.length > 0 ? (
+                        <div className="space-y-6">
+                          {/* Mission Reports Section */}
+                          {missionLore.length > 0 && (
+                            <div>
+                              <h4 className="font-orbitron text-sm font-bold text-green-400 mb-3 flex items-center gap-2">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                MISSION REPORTS
+                              </h4>
+                              <div className="grid grid-cols-1 gap-3">
+                                {missionLore.map((loreItem) => (
+                                  <LoreCard
+                                    key={loreItem.id}
+                                    lore={loreItem}
+                                    nft={agent}
+                                    onClick={() => handleLoreClick(loreItem)}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Other Lore Section */}
+                          {lore && lore.length > 0 && (
+                            <div>
+                              <h4 className="font-orbitron text-sm font-bold text-purple-400 mb-3 flex items-center gap-2">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                </svg>
+                                AGENT MEMORIES
+                              </h4>
+                              <div className="grid grid-cols-1 gap-3">
+                                {lore.map((loreItem) => (
+                                  <LoreCard
+                                    key={loreItem.id}
+                                    lore={loreItem}
+                                    nft={agent}
+                                    onClick={() => handleLoreClick(loreItem)}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="bg-black/40 border border-gray-700/30 rounded-lg p-8 text-center">
@@ -431,9 +574,23 @@ export default function AgentClient({ agentId }: AgentClientProps) {
           nft={agent}
           isOpen={showRevealModal}
           onClose={() => {
+            track('agent_lore_reveal_closed', {
+              agent_id: agentId,
+              lore_id: claimedLore.id
+            });
             setShowRevealModal(false);
             setActiveTab("lore");
           }}
+        />
+      )}
+
+      {/* Lore Modal for viewing claimed lore */}
+      {selectedLore && (
+        <LoreModal
+          lore={selectedLore}
+          nft={agent}
+          isOpen={showLoreModal}
+          onClose={closeLoreModal}
         />
       )}
     </div>

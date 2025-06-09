@@ -3,10 +3,6 @@ import { Router } from "express";
 import {
   handleCompressKnowledge,
   handleDecompressKnowledge,
-  handleCreateKnowledge,
-  handleGetKnowledge,
-  handleUpdateKnowledge,
-  handleListKnowledge,
   handleShareKnowledge,
   handleTransferKnowledge,
 } from "../endpoints/knowledge.endpoint";
@@ -14,20 +10,29 @@ import {
 import {
   CompressKnowledgeRequestSchema,
   DecompressKnowledgeRequestSchema,
-  CreateKnowledgeRequestSchema,
-  GetKnowledgeRequestSchema,
-  UpdateKnowledgeRequestSchema,
-  ListKnowledgeRequestSchema,
   ShareKnowledgeRequestSchema,
   TransferKnowledgeRequestSchema,
 } from "../schemas/knowledge.schema";
 
-import { protectedEndpoint, agentEndpoint, specialAccessEndpoint } from "../middleware";
+import { protectedEndpoint, agentEndpoint } from "../middleware";
 
 const router = Router();
 
 /**
+ * MIGRATED: Removed CRUD routes
+ * 
+ * DELETED ROUTES - Use auto-CRUD instead:
+ * - POST /knowledge → POST /api/model/knowledge
+ * - GET /knowledge/:knowledgeId → GET /api/model/knowledge/:id
+ * - PATCH /knowledge/:knowledgeId → PATCH /api/model/knowledge/:id
+ * - GET /knowledge → GET /api/model/knowledge
+ * 
+ * KEPT: Business logic routes only
+ */
+
+/**
  * Knowledge compression/decompression endpoints
+ * - AI-powered compression/decompression
  * - Available to all authenticated users
  */
 router.post(
@@ -43,25 +48,8 @@ router.post(
 );
 
 /**
- * Knowledge CRUD endpoints
- * - Create/Update requires authentication
- * - Get/List respects access control based on knowledge settings
- */
-router.post("/knowledge", agentEndpoint(CreateKnowledgeRequestSchema), handleCreateKnowledge);
-
-router.get("/knowledge/:knowledgeId", agentEndpoint(GetKnowledgeRequestSchema), handleGetKnowledge);
-
-router.patch(
-  "/knowledge/:knowledgeId",
-  agentEndpoint(UpdateKnowledgeRequestSchema),
-  handleUpdateKnowledge,
-);
-
-router.get("/knowledge", agentEndpoint(ListKnowledgeRequestSchema), handleListKnowledge);
-
-/**
  * Knowledge sharing endpoints
- * - Requires authentication
+ * - Complex permission logic
  * - Respects agent ranks and permissions
  */
 router.post(
@@ -72,11 +60,11 @@ router.post(
 
 /**
  * Knowledge transfer endpoints
- * - Requires special access (agent_creator role)
- * - Used for transferring knowledge between agents
+ * - Complex transfer logic between agents
+ * - Handles copy vs move semantics
  */
 router.post(
-  "/knowledge/transfer",
+  "/knowledge/:knowledgeId/transfer",
   agentEndpoint(TransferKnowledgeRequestSchema),
   handleTransferKnowledge,
 );

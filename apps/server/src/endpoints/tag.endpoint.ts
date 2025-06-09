@@ -53,11 +53,11 @@ export const handleGetUserTags = async (req: Request, res: Response) => {
 export const handleGetLeaderboard = async (req: Request, res: Response) => {
   try {
     const { timeframe = "daily", limit = 10, offset = 0 } = req.query;
-    const leaderboard = await getTagLeaderboard({
-      timeFrame: timeframe as "daily" | "weekly" | "monthly" | "allTime",
-      limit: Number(limit),
-      offset: Number(offset),
-    });
+    const leaderboard = await getTagLeaderboard(
+      timeframe as "daily" | "weekly" | "monthly" | "allTime",
+      Number(limit),
+      Number(offset)
+    );
     return sendSuccess(res, leaderboard);
   } catch (error) {
     console.error(`${LOG_PREFIX} Error in getLeaderboard:`, error);

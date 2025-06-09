@@ -156,7 +156,7 @@ export const skillMatchingService = {
         // If no direct matches, try to calculate a more nuanced similarity score
         if (similarity === 0) {
           try {
-            similarity = await this.calculateSimilarity(description, skill);
+            similarity = await this.calculateSimilarity(description, skill as unknown as Skill);
           } catch (error) {
             // If AI similarity fails, use a very basic heuristic
             const descWords = description.toLowerCase().split(/\s+/);
@@ -178,7 +178,7 @@ export const skillMatchingService = {
         similarity += Math.min(skill.useCount / 100, 0.1);
 
         return {
-          skill: this.mapToSkill(skill),
+          skill: this.mapToSkill(skill as unknown as Skill),
           confidence: parseFloat(similarity.toFixed(2)),
           matchedOn: {
             name: nameMatch,

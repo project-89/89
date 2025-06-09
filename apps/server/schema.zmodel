@@ -1,0 +1,47 @@
+import "./prisma/schema.prisma"
+
+// Account - users can only access their own account
+model Account {
+    @@allow('read,update', id == auth().accountId || auth().isAdmin == true)
+    @@allow('create,delete', auth().isAdmin == true)
+}
+
+// Profile - public/private visibility
+model Profile {
+    @@allow('read', isPublic == true || accountId == auth().accountId || auth().isAdmin == true)
+    @@allow('create', auth().accountId != null)
+    @@allow('update,delete', accountId == auth().accountId || auth().isAdmin == true)
+}
+
+// Agent - owned by accounts
+model Agent {
+    @@allow('read', id == auth().agentId || accountId == auth().accountId || auth().isAdmin == true)
+    @@allow('create', auth().accountId != null)
+    @@allow('update', accountId == auth().accountId || auth().isAdmin == true)
+    @@allow('delete', auth().isAdmin == true)
+}
+
+// Notification - recipient only
+model Notification {
+    @@allow('read,update', recipientId == auth().accountId || auth().isAdmin == true)
+    @@allow('create,delete', auth().isAdmin == true)
+}
+
+// Video - public/private with creator access
+model Video {
+    @@allow('read', visibility == 'public' || creatorId == auth().accountId || auth().isAdmin == true)
+    @@allow('create', auth().accountId != null)
+    @@allow('update,delete', creatorId == auth().accountId || auth().isAdmin == true)
+}
+
+// TrainingMission - public read for available missions
+model TrainingMission {
+    @@allow('read', (status == 'available' && isActive == true) || auth().isAdmin == true)
+    @@allow('create,update,delete', auth().isAdmin == true)
+}
+
+// NFT - public read only
+model NFT {
+    @@allow('read', true)
+    @@allow('create,update,delete', auth().isAdmin == true)
+}

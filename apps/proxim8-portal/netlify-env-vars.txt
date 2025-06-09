@@ -1,0 +1,25 @@
+# Environment Variables for Netlify Production Deployment
+# Add these to your Netlify site's environment variables:
+# Site Settings > Environment variables > Add variable
+
+# Backend API Configuration
+NEXT_PUBLIC_API_URL=https://proxim8-server-dev-k2k5q5npjq-uc.a.run.app/api
+NEXT_PUBLIC_API_KEY=proxim8-dev-key
+
+# Solana Configuration  
+NEXT_PUBLIC_SOLANA_NETWORK=mainnet-beta
+NEXT_PUBLIC_SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+
+# Application Settings
+NEXT_PUBLIC_APP_NAME=Proxim8 NFT Video Platform
+NEXT_PUBLIC_NOTIFICATION_TIMEOUT=5000
+
+# Build Configuration
+NODE_ENV=production
+
+# Instructions:
+# 1. Go to https://app.netlify.com/sites/[your-site]/settings/env
+# 2. Click "Add a variable" for each variable above
+# 3. Enter the exact variable name and value
+# 4. Click "Save" after adding all variables
+# 5. Redeploy your site 

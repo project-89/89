@@ -300,8 +300,16 @@ export default function HomeClient({
                 )}
               </div>
               {isLoaded && (
-                <div className="wallet-button-container">
+                <div className="wallet-button-container space-y-3">
                   <UnifiedWalletButton />
+                  <a
+                    href="https://launchmynft.io/sol/16033"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="wallet-adapter-button wallet-adapter-button-trigger bg-transparent border-2 border-gray-600 text-gray-400 hover:border-gray-500 hover:text-gray-300 transition-all duration-200 block"
+                  >
+                    Buy Proxim8 NFT
+                  </a>
                 </div>
               )}
             </div>

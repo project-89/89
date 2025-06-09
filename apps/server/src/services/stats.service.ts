@@ -3,6 +3,7 @@ import { ApiError } from "../utils";
 import { Stats, StatsResponse } from "../schemas";
 import { getDb, formatDocument } from "../utils/mongodb";
 import { stringIdFilter } from "../utils/mongo-filters";
+import { randomUUID } from "crypto";
 
 const LOG_PREFIX = "[Stats Service]";
 
@@ -61,7 +62,7 @@ export const recordHistory = async (profileId: string, stats: StatsResponse): Pr
     console.log(`${LOG_PREFIX} Recording history for profile: ${profileId}`);
     const db = await getDb();
     await db.collection(COLLECTIONS.STATS_HISTORY).insertOne({
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       timestamp: Date.now(),
       profileId,
       stats,

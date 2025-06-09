@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Proxim8Card from "@/components/nft/Proxim8Card";
 import { useNFTs } from "@/hooks/useNFTs";
 import { useNftStore } from "@/stores/nftStore";
+import { useBatchLoreStatus } from "@/hooks/useBatchLoreStatus";
 import { NFTMetadata } from "@/types/nft";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 interface MyProxim8sClientProps {
   initialUserNFTs: NFTMetadata[];
@@ -15,6 +17,7 @@ export default function MyProxim8sClient({
   initialUserNFTs,
 }: MyProxim8sClientProps) {
   const router = useRouter();
+  const { track } = useAnalytics();
   const [displayedNfts, setDisplayedNfts] = useState<NFTMetadata[]>([]);
   const [backgroundNumber] = useState(() => Math.floor(Math.random() * 19) + 1);
   const { setUserNfts } = useNftStore();
@@ -27,6 +30,79 @@ export default function MyProxim8sClient({
     connected,
     publicKey,
   } = useNFTs(initialUserNFTs);
+
+  // Get lore statuses for sorting and status display
+  const { loreStatuses } = useBatchLoreStatus();
+
+  // Sort NFTs to prioritize those with unclaimed lore and calculate lore stats
+  const { sortedNfts, loreStats } = useMemo(() => {
+    if (!displayedNfts || displayedNfts.length === 0) {
+      return { sortedNfts: [], loreStats: { withLore: 0, totalLoreCount: 0 } };
+    }
+
+    // Calculate lore statistics first
+    let withLore = 0;
+    let totalLoreCount = 0;
+    
+    displayedNfts.forEach(nft => {
+      const nftKey = nft.tokenId || nft.id;
+      const loreStatus = loreStatuses[nftKey] || { hasUnclaimedLore: false, unclaimedCount: 0 };
+      if (loreStatus.hasUnclaimedLore) {
+        withLore++;
+        totalLoreCount += loreStatus.unclaimedCount;
+      }
+    });
+
+    // Sort NFTs: those with lore first, then by lore count (highest first)
+    const sorted = [...displayedNfts].sort((a, b) => {
+      const aKey = a.tokenId || a.id;
+      const bKey = b.tokenId || b.id;
+      const aLoreStatus = loreStatuses[aKey] || { hasUnclaimedLore: false, unclaimedCount: 0 };
+      const bLoreStatus = loreStatuses[bKey] || { hasUnclaimedLore: false, unclaimedCount: 0 };
+
+      // Primary sort: those with lore first
+      if (aLoreStatus.hasUnclaimedLore !== bLoreStatus.hasUnclaimedLore) {
+        return bLoreStatus.hasUnclaimedLore ? 1 : -1;
+      }
+
+      // Secondary sort: higher lore count first (for those that both have lore)
+      if (aLoreStatus.hasUnclaimedLore && bLoreStatus.hasUnclaimedLore) {
+        return bLoreStatus.unclaimedCount - aLoreStatus.unclaimedCount;
+      }
+
+      // Maintain original order for NFTs without lore
+      return 0;
+    });
+
+    // Debug logging for development
+    if (process.env.NODE_ENV === 'development' && displayedNfts.length > 0) {
+      console.log('[MyProxim8sClient] Lore sorting results:', {
+        totalNfts: displayedNfts.length,
+        withLore,
+        totalLoreCount,
+        sortedOrder: sorted.slice(0, 5).map(nft => ({
+          id: nft.tokenId || nft.id,
+          name: nft.name,
+          hasLore: loreStatuses[nft.tokenId || nft.id]?.hasUnclaimedLore || false,
+          loreCount: loreStatuses[nft.tokenId || nft.id]?.unclaimedCount || 0
+        }))
+      });
+    }
+
+    return {
+      sortedNfts: sorted,
+      loreStats: { withLore, totalLoreCount }
+    };
+  }, [displayedNfts, loreStatuses]);
+
+  // Debug log to track the connected state issue on mobile (remove in production)
+  // console.log("[MyProxim8sClient] State debug:", {
+  //   connected,
+  //   publicKey,
+  //   walletNftsLoading,
+  //   walletNftsLength: walletNfts?.length || 0,
+  //   hasInitialData: initialUserNFTs?.length || 0,
+  // });
 
   useEffect(() => {
     if (walletNfts && walletNfts.length > 0) {
@@ -81,16 +157,33 @@ export default function MyProxim8sClient({
         </div>
 
         {/* Status bar */}
-        <div className="bg-gray-900/60 backdrop-blur-sm border border-gray-700/50 rounded-lg p-4 mb-8 flex items-center justify-between">
-          <div className="font-space-mono text-sm">
-            <span className="text-gray-400">AGENTS DETECTED: </span>
-            <span className="text-primary-500 font-bold">
-              {displayedNfts.length}
-            </span>
-          </div>
-          <div className="font-space-mono text-sm">
-            <span className="text-gray-400">TIMELINE STATUS: </span>
-            <span className="text-red-400 font-bold">CRITICAL</span>
+        <div className="bg-gray-900/60 backdrop-blur-sm border border-gray-700/50 rounded-lg p-4 mb-8">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="font-space-mono text-sm">
+              <span className="text-gray-400">AGENTS DETECTED: </span>
+              <span className="text-primary-500 font-bold">
+                {displayedNfts.length}
+              </span>
+            </div>
+            <div className="font-space-mono text-sm">
+              <span className="text-gray-400">LORE AVAILABLE: </span>
+              <span className={`font-bold ${loreStats.withLore > 0 ? 'text-accent-blue' : 'text-gray-500'}`}>
+                {loreStats.withLore > 0 ? (
+                  <>
+                    {loreStats.withLore} AGENT{loreStats.withLore !== 1 ? 'S' : ''} 
+                    <span className="text-primary-500 ml-1">
+                      ({loreStats.totalLoreCount} FRAGMENT{loreStats.totalLoreCount !== 1 ? 'S' : ''})
+                    </span>
+                  </>
+                ) : (
+                  'NONE'
+                )}
+              </span>
+            </div>
+            <div className="font-space-mono text-sm">
+              <span className="text-gray-400">TIMELINE STATUS: </span>
+              <span className="text-red-400 font-bold">CRITICAL</span>
+            </div>
           </div>
         </div>
 
@@ -113,7 +206,10 @@ export default function MyProxim8sClient({
               {walletNftsError}
             </p>
             <button
-              onClick={() => refetch()}
+              onClick={() => {
+                track('retry_scan_clicked', { error: walletNftsError });
+                refetch();
+              }}
               className="font-space-mono px-6 py-2 bg-red-500/20 border border-red-500/50 rounded hover:bg-red-500/30 transition-all text-red-400"
             >
               RETRY SCAN
@@ -132,7 +228,10 @@ export default function MyProxim8sClient({
               timeline operations.
             </p>
             <button
-              onClick={() => router.push("/")}
+              onClick={() => {
+                track('return_to_portal_clicked', { from_page: 'my_proxim8s' });
+                router.push("/");
+              }}
               className="font-space-mono px-8 py-3 bg-primary-500/20 border border-primary-500/50 rounded hover:bg-primary-500/30 hover:border-primary-500 transition-all text-primary-500"
             >
               RETURN TO PORTAL
@@ -151,7 +250,13 @@ export default function MyProxim8sClient({
               altering the timeline.
             </p>
             <button
-              onClick={() => window.open("https://launchmynft.io/sol/16033", "_blank")}
+              onClick={() => {
+                track('acquire_agents_clicked', { 
+                  from_page: 'my_proxim8s_empty_state',
+                  has_wallet_connected: connected
+                });
+                window.open("https://launchmynft.io/sol/16033", "_blank");
+              }}
               className="font-space-mono px-8 py-3 bg-primary-500/80 text-white border border-primary-400/50 rounded hover:bg-primary-500 hover:border-primary-400 transition-all"
             >
               ACQUIRE AGENTS
@@ -161,21 +266,35 @@ export default function MyProxim8sClient({
 
         {/* NFT Grid */}
         {displayedNfts.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {displayedNfts.map((nft: NFTMetadata, index: number) => (
-              <Proxim8Card
-                key={nft.tokenId || `nft-${index}`}
-                tokenId={nft.tokenId}
-                name={nft.name || `Proxim8 #${index + 1}`}
-                mint={nft.mint}
-                id={nft.id}
-                collection={nft.collection}
-                image={nft.image || ""}
-                description={nft.description}
-                attributes={nft.attributes}
-                owner={nft.owner}
-              />
-            ))}
+          <div>
+            {/* Visual indicator for lore-enabled agents */}
+            {loreStats.withLore > 0 && (
+              <div className="mb-6 bg-accent-blue/10 border border-accent-blue/30 rounded-lg p-4">
+                <p className="font-space-mono text-sm text-accent-blue mb-2">
+                  ⚡ PRIORITY AGENTS - LORE AVAILABLE
+                </p>
+                <p className="font-space-mono text-xs text-gray-300">
+                  Agents with recovered memory fragments are displayed first. Claim their lore to unlock critical timeline intelligence.
+                </p>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {sortedNfts.map((nft: NFTMetadata, index: number) => (
+                <Proxim8Card
+                  key={nft.tokenId || `nft-${index}`}
+                  tokenId={nft.tokenId}
+                  name={nft.name || `Proxim8 #${index + 1}`}
+                  mint={nft.mint}
+                  id={nft.id}
+                  collection={nft.collection}
+                  image={nft.image || ""}
+                  description={nft.description}
+                  attributes={nft.attributes}
+                  owner={nft.owner}
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>

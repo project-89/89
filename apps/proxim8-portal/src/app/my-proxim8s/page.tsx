@@ -5,9 +5,9 @@ import MyProxim8sClient from "./MyProxim8sClient";
 import { NFTMetadata } from "@/types/nft";
 
 export const metadata: Metadata = {
-  title: "My Proxim8s | Project 89",
-  description: "View and manage your Proxim8 agents from the future. Each one carries unique abilities to alter timeline events.",
-  keywords: "Proxim8, NFT, timeline, agents, Project 89",
+  title: "My Proxim8 Agents | Project 89 Timeline Intervention",
+  description: "Command your Proxim8 AI agents from 2089. Each consciousness carries unique memories and abilities to disrupt Oneirocom's dystopian timeline. Deploy them on reality-altering missions to save the future.",
+  keywords: "Proxim8 agents, AI consciousness, timeline missions, resistance operatives, consciousness technology, future memories, reality hacking, Project 89",
 };
 
 export const revalidate = 3600;

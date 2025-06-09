@@ -39,9 +39,9 @@ declare global {
       /**
        * Authentication Context
        * Built up through middleware chain:
-       * 1. fingerprintVerify -> sets auth.fingerprintId
+       * 1. fingerprintVerify -> sets auth.fingerprint
        * 2. authMiddleware -> sets auth.wallet and/or auth.account
-       * 3. roleMiddleware -> sets auth.account.roles
+       * 3. roleMiddleware -> sets auth.fingerprint.roles
        * 4. agentMiddleware -> sets auth.agent
        * 5. proxim8AuthMiddleware -> sets auth.proxim8
        */

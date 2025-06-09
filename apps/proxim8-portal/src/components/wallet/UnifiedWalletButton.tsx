@@ -6,6 +6,7 @@ import { useWalletAuth } from "@/stores/walletAuthStore";
 import { ChevronDownIcon } from "@heroicons/react/24/solid";
 import { useWallet } from "@solana/wallet-adapter-react";
 import Image from "next/image";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 // Client-side utility to check if the current platform is mobile based on userAgent
 const checkIfMobilePlatform = (): boolean => {
@@ -24,6 +25,7 @@ export function UnifiedWalletButton() {
   const [isClientMobile, setIsClientMobile] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { track } = useAnalytics();
 
   // Get all wallet and auth state from our unified store
   const {
@@ -119,6 +121,10 @@ export function UnifiedWalletButton() {
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(walletAddress || "");
+                    track('wallet_address_copied', {
+                      platform: 'desktop',
+                      wallet_address: walletAddress
+                    });
                     setShowDropdown(false);
                   }}
                   className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded font-space-mono"
@@ -127,6 +133,10 @@ export function UnifiedWalletButton() {
                 </button>
                 <button
                   onClick={() => {
+                    track('wallet_disconnect_clicked', {
+                      platform: 'desktop',
+                      wallet_address: walletAddress
+                    });
                     clearError();
                     disconnect();
                     setShowDropdown(false);
@@ -142,8 +152,12 @@ export function UnifiedWalletButton() {
       );
     }
 
-    // When not connected, use the standard button to get the modal
-    return <WalletMultiButton />;
+    // When not connected, use the standard button with custom styling
+    return (
+      <div className="unified-wallet-button">
+        <WalletMultiButton />
+      </div>
+    );
   }
 
   // Mobile mode: Custom implementation
@@ -157,10 +171,13 @@ export function UnifiedWalletButton() {
         <button
           disabled={isConnecting}
           onClick={() => {
+            track('connect_wallet_clicked', {
+              platform: 'mobile'
+            });
             clearError();
             connect(); // This connect() will internally do the regex check again
           }}
-          className="wallet-adapter-button wallet-adapter-button-trigger"
+          className="font-space-mono text-xs px-3.5 py-1.5 bg-primary-500/10 border border-primary-500/50 rounded-full text-primary-500 hover:bg-primary-500/20 hover:border-primary-500 transition-all uppercase disabled:opacity-50 h-8"
         >
           {connectButtonText}
         </button>
@@ -175,7 +192,7 @@ export function UnifiedWalletButton() {
       <div>
         <button
           disabled={true}
-          className="wallet-adapter-button wallet-adapter-button-trigger"
+          className="font-space-mono text-xs px-3.5 py-1.5 bg-primary-500/10 border border-primary-500/50 rounded-full text-primary-500 hover:bg-primary-500/20 hover:border-primary-500 transition-all uppercase disabled:opacity-50 h-8"
         >
           {isConnecting ? "Connecting..." : "Authenticating..."}
         </button>
@@ -191,10 +208,14 @@ export function UnifiedWalletButton() {
         <button
           disabled={isAuthenticating}
           onClick={() => {
+            track('authenticate_wallet_clicked', {
+              platform: 'mobile',
+              wallet_address: walletAddress
+            });
             clearError();
             authenticate();
           }}
-          className="wallet-adapter-button wallet-adapter-button-trigger"
+          className="font-space-mono text-xs px-3.5 py-1.5 bg-primary-500/10 border border-primary-500/50 rounded-full text-primary-500 hover:bg-primary-500/20 hover:border-primary-500 transition-all uppercase disabled:opacity-50 h-8"
         >
           Authenticate Wallet
         </button>
@@ -203,6 +224,11 @@ export function UnifiedWalletButton() {
             <div className="text-red-500 text-sm mb-2">{error}</div>
             <button
               onClick={() => {
+                track('disconnect_and_reconnect_clicked', {
+                  platform: 'mobile',
+                  wallet_address: walletAddress,
+                  error: error
+                });
                 clearError();
                 disconnect();
               }}
@@ -274,6 +300,10 @@ export function UnifiedWalletButton() {
             <button
               onClick={() => {
                 navigator.clipboard.writeText(displayAddress || "");
+                track('wallet_address_copied', {
+                  platform: 'mobile',
+                  wallet_address: displayAddress
+                });
                 setShowDropdown(false);
               }}
               className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-800 rounded font-space-mono"
@@ -282,6 +312,10 @@ export function UnifiedWalletButton() {
             </button>
             <button
               onClick={() => {
+                track('wallet_disconnect_clicked', {
+                  platform: 'mobile',
+                  wallet_address: displayAddress
+                });
                 clearError();
                 disconnect();
                 setShowDropdown(false);

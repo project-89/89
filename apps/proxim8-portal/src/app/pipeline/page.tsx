@@ -3,8 +3,9 @@ import { Suspense } from "react";
 import PipelineClient from "./PipelineClient";
 
 export const metadata: Metadata = {
-  title: "Video Generation | Proxim8",
-  description: "Create unique videos from your Proxim8 NFTs using AI",
+  title: "Agent Media Pipeline | Project 89 Content Generation",
+  description: "Generate unique videos and media content featuring your Proxim8 agents. Visualize their timeline interventions and document their missions against Oneirocom's dystopian future.",
+  keywords: "Proxim8 videos, agent content generation, timeline documentation, AI video creation, mission reports, consciousness technology",
 };
 
 // Force dynamic rendering since this page uses search params

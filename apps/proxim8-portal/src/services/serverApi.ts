@@ -3,12 +3,12 @@
  * Does NOT rely on client hooks, browser APIs, or Zustand state
  */
 
-import { ServerApiClient } from "@/utils/serverApiClient";
-import { ApiError } from "@/types/error";
+import { ApiError } from '@/types/error';
+import { ServerApiClient } from '@/utils/serverApiClient';
 
 // Import the FetchOptions type from serverApiClient
 type FetchOptions = {
-  method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
   headers?: Record<string, string>;
   body?: any;
   cache?: RequestCache;
@@ -19,7 +19,7 @@ type FetchOptions = {
 };
 
 // Base API configuration
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
 // Create a singleton instance of the ServerApiClient
 const apiClient = new ServerApiClient(API_URL);
@@ -33,13 +33,13 @@ const convertConfig = (config?: RequestInit): FetchOptions | undefined => {
   // Convert method to typed method
   if (config.method) {
     const method = config.method.toUpperCase();
-    if (["GET", "POST", "PUT", "DELETE", "PATCH"].includes(method)) {
+    if (['GET', 'POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
       fetchOptions.method = method as
-        | "GET"
-        | "POST"
-        | "PUT"
-        | "DELETE"
-        | "PATCH";
+        | 'GET'
+        | 'POST'
+        | 'PUT'
+        | 'DELETE'
+        | 'PATCH';
     }
   }
 
@@ -50,7 +50,7 @@ const convertConfig = (config?: RequestInit): FetchOptions | undefined => {
       config.headers.forEach((value, key) => {
         headers[key] = value;
       });
-    } else if (typeof config.headers === "object") {
+    } else if (typeof config.headers === 'object') {
       Object.assign(headers, config.headers);
     }
     fetchOptions.headers = headers;
@@ -83,7 +83,7 @@ export const serverApi = {
       throw new ApiError({
         status: 500,
         message:
-          error instanceof Error ? error.message : "Unknown error occurred",
+          error instanceof Error ? error.message : 'Unknown error occurred',
         error: error instanceof Error ? error : undefined,
       });
     }
@@ -112,7 +112,7 @@ export const serverApi = {
       throw new ApiError({
         status: 500,
         message:
-          error instanceof Error ? error.message : "Unknown error occurred",
+          error instanceof Error ? error.message : 'Unknown error occurred',
         error: error instanceof Error ? error : undefined,
       });
     }
@@ -137,7 +137,7 @@ export const serverApi = {
       throw new ApiError({
         status: 500,
         message:
-          error instanceof Error ? error.message : "Unknown error occurred",
+          error instanceof Error ? error.message : 'Unknown error occurred',
         error: error instanceof Error ? error : undefined,
       });
     }
@@ -161,7 +161,7 @@ export const serverApi = {
       throw new ApiError({
         status: 500,
         message:
-          error instanceof Error ? error.message : "Unknown error occurred",
+          error instanceof Error ? error.message : 'Unknown error occurred',
         error: error instanceof Error ? error : undefined,
       });
     }

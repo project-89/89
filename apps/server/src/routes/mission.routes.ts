@@ -1,33 +1,30 @@
 import { Router } from "express";
 import { protectedEndpoint, fingerprintWriteEndpoint } from "../middleware/chains.middleware";
 import {
-  MissionSchema,
   MissionStatusEnum,
   MissionObjectiveSchema,
 } from "../schemas/mission.schema";
 import { z } from "zod";
 import {
-  handleCreateMission,
-  handleGetMission,
   handleGetAvailableMissions,
   handleUpdateMissionStatus,
   handleUpdateMissionObjectives,
   handleGetActiveMissions,
   handleAddFailureRecord,
-  handleDeleteMission,
 } from "../endpoints/mission.endpoint";
 
 const router = Router();
 
-// Create mission (admin only)
-router.post("/missions", ...protectedEndpoint(MissionSchema), handleCreateMission);
-
-// Get mission by ID
-router.get(
-  "/missions/:id",
-  ...fingerprintWriteEndpoint(z.object({ id: z.string() })),
-  handleGetMission,
-);
+/**
+ * MIGRATED: Removed CRUD routes
+ * 
+ * DELETED ROUTES - Use auto-CRUD instead:
+ * - POST /missions → POST /api/model/mission
+ * - GET /missions/:id → GET /api/model/mission/:id  
+ * - DELETE /missions/:id → DELETE /api/model/mission/:id
+ * 
+ * KEPT: Business logic routes only
+ */
 
 // Get available missions
 router.get(
@@ -88,11 +85,5 @@ router.post(
   handleAddFailureRecord,
 );
 
-// Delete mission (admin only)
-router.delete(
-  "/missions/:id",
-  ...protectedEndpoint(z.object({ id: z.string() })),
-  handleDeleteMission,
-);
 
 export default router;

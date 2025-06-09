@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletAuth } from "@/stores/walletAuthStore";
 import { useNftStore } from "@/stores/nftStore";
 import NFTImage from "@/components/common/NFTImage";
 import LoreCard from "@/components/lore/LoreCard";
@@ -12,10 +12,12 @@ import LoreRevealModal from "@/components/lore/LoreRevealModal";
 import { Lore } from "@/types/lore";
 import { NFTMetadata } from "@/types/nft";
 import { getUserNftLoreItems, claimLoreById } from "@/services/lore";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 export default function LoreClient() {
   const router = useRouter();
-  const { publicKey } = useWallet();
+  const { track } = useAnalytics();
+  const { connected, isAuthenticated, walletAddress } = useWalletAuth();
   const userNfts = useNftStore((state) => state.userNfts);
   const [backgroundNumber] = useState(() => Math.floor(Math.random() * 19) + 1);
   const [allLoreItems, setAllLoreItems] = useState<
@@ -39,7 +41,7 @@ export default function LoreClient() {
   // Fetch all lore items (claimed and unclaimed)
   useEffect(() => {
     const fetchLore = async () => {
-      if (!publicKey) {
+      if (!connected || !isAuthenticated || !walletAddress) {
         setLoreLoading(false);
         return;
       }
@@ -57,11 +59,17 @@ export default function LoreClient() {
     };
 
     fetchLore();
-  }, [publicKey]);
+  }, [connected, isAuthenticated, walletAddress]);
 
   // Handle claiming a specific lore item
   const handleClaimLore = async (loreId: string, nftId?: string) => {
-    if (!publicKey) return;
+    if (!connected || !isAuthenticated || !walletAddress) return;
+
+    track('lore_claim_started', {
+      lore_id: loreId,
+      nft_id: nftId,
+      unclaimed_count: unclaimedLoreItems.length
+    });
 
     try {
       setClaiming(true);
@@ -97,9 +105,20 @@ export default function LoreClient() {
         // Show reveal modal for new claims
         setIsNewClaim(true);
         setShowRevealModal(true);
+        
+        track('lore_claim_success', {
+          lore_id: loreId,
+          lore_type: 'type' in claimedLoreItem ? claimedLoreItem.type : 'unknown',
+          lore_title: claimedLoreItem.title,
+          nft_id: nftId
+        });
       }
     } catch (error) {
       console.error("Error claiming lore:", error);
+      track('lore_claim_error', {
+        lore_id: loreId,
+        error_message: error instanceof Error ? error.message : 'Unknown error'
+      });
     } finally {
       setClaiming(false);
       setClaimingId(null);
@@ -108,6 +127,12 @@ export default function LoreClient() {
 
   // Handle clicking on a claimed lore card
   const handleLoreClick = (lore: Lore) => {
+    track('lore_card_clicked', {
+      lore_id: lore.id,
+      lore_type: 'type' in lore ? lore.type : 'unknown',
+      lore_title: lore.title
+    });
+
     setSelectedLore(lore);
 
     // Find the NFT for this lore
@@ -201,7 +226,7 @@ export default function LoreClient() {
         )}
 
         {/* No Wallet Connected */}
-        {!publicKey && !loreLoading && (
+        {(!connected || !isAuthenticated) && !loreLoading && (
           <div className="bg-gray-900/60 backdrop-blur-sm border border-gray-700/50 rounded-lg p-12 text-center">
             <h3 className="font-orbitron text-2xl font-bold text-primary-500 mb-4">
               AUTHENTICATION REQUIRED
@@ -210,7 +235,10 @@ export default function LoreClient() {
               Connect your wallet to access the lore archives.
             </p>
             <button
-              onClick={() => router.push("/")}
+              onClick={() => {
+                track('return_to_portal_clicked', { from_page: 'lore' });
+                router.push("/");
+              }}
               className="font-space-mono px-8 py-3 bg-primary-500/20 border border-primary-500/50 rounded hover:bg-primary-500/30 hover:border-primary-500 transition-all text-primary-500"
             >
               RETURN TO PORTAL
@@ -219,7 +247,7 @@ export default function LoreClient() {
         )}
 
         {/* Claimed Lore Section */}
-        {!loreLoading && publicKey && claimedLoreItems.length > 0 && (
+        {!loreLoading && connected && isAuthenticated && claimedLoreItems.length > 0 && (
           <>
             <h2 className="font-orbitron text-2xl font-bold text-gray-200 mb-6">
               Recovered Memories
@@ -246,7 +274,7 @@ export default function LoreClient() {
         )}
 
         {/* Empty State */}
-        {!loreLoading && publicKey && allLoreItems.length === 0 && (
+        {!loreLoading && connected && isAuthenticated && allLoreItems.length === 0 && (
           <div className="bg-gray-900/60 backdrop-blur-sm border border-gray-700/50 rounded-lg p-12 text-center">
             <h3 className="font-orbitron text-2xl font-bold text-gray-500 mb-4">
               NO LORE AVAILABLE YET
@@ -256,7 +284,10 @@ export default function LoreClient() {
               memories.
             </p>
             <button
-              onClick={() => router.push("/my-proxim8s")}
+              onClick={() => {
+                track('view_agents_clicked', { from_page: 'lore_empty_state' });
+                router.push("/my-proxim8s");
+              }}
               className="font-space-mono px-8 py-3 bg-gray-800/50 border border-gray-700 rounded hover:bg-gray-700/50 hover:border-gray-600 transition-all text-gray-300"
             >
               VIEW YOUR AGENTS
@@ -272,6 +303,10 @@ export default function LoreClient() {
           nft={selectedNft || undefined}
           isOpen={showLoreModal}
           onClose={() => {
+            track('lore_modal_closed', {
+              lore_id: selectedLore.id,
+              modal_type: 'view'
+            });
             setShowLoreModal(false);
             setSelectedLore(null);
             setSelectedNft(null);
@@ -286,6 +321,10 @@ export default function LoreClient() {
           nft={selectedNft || undefined}
           isOpen={showRevealModal}
           onClose={() => {
+            track('lore_modal_closed', {
+              lore_id: selectedLore.id,
+              modal_type: 'reveal'
+            });
             setShowRevealModal(false);
             setSelectedLore(null);
             setSelectedNft(null);

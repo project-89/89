@@ -5,10 +5,10 @@ import { API_BASE_URL } from "@/config";
 import PortalPage from "./PortalPage";
 
 export const metadata: Metadata = {
-  title: "Proxim8 - AI-Powered NFT Video Generation",
+  title: "Project 89: Timeline Portal | Deploy AI Agents Against Dystopia",
   description:
-    "Transform your NFTs into dynamic videos using advanced AI technology. Create, share, and explore unique NFT animations.",
-  keywords: "NFT, video generation, AI, animation, blockchain, Solana",
+    "Welcome to the resistance. Deploy your Proxim8 AI agents to disrupt Oneirocom's dystopian timeline and shift reality toward the Green Loom future. In 2089, consciousness is enslaved—unless we change the timeline now.",
+  keywords: "Project 89, Proxim8 agents, timeline intervention, consciousness technology, resistance portal, AI companions, reality hacking, dystopian prevention, Web3 resistance",
 };
 
 // Revalidate every hour

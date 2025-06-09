@@ -55,6 +55,23 @@ export const getAvailableLoreByNftId = async (
 };
 
 /**
+ * Batch check for unclaimed lore across multiple NFTs
+ * Reduces API calls from n individual requests to 1 batch request
+ */
+export const getBatchAvailableLore = async (
+  nftIds: string[]
+): Promise<Record<string, { hasUnclaimedLore: boolean; unclaimedCount: number }>> => {
+  try {
+    const response = await clientApiAdapter.post('/api/lore/batch/available', { nftIds });
+    return response as Record<string, { hasUnclaimedLore: boolean; unclaimedCount: number }>;
+  } catch (error) {
+    console.error("Error getting batch available lore:", error);
+    // Return empty object on error - components will handle gracefully
+    return {};
+  }
+};
+
+/**
  * Claim lore for an NFT
  */
 export const claimLore = async (nftId: string): Promise<Lore> => {
@@ -226,5 +243,32 @@ export async function claimLoreById(loreId: string, nftId?: string): Promise<Lor
   } catch (error) {
     console.error("Error claiming lore by ID:", error);
     throw error;
+  }
+}
+
+/**
+ * Get claimable mission lore for a specific NFT
+ * This returns lore that's time-locked to mission completion
+ */
+export async function getClaimableMissionLore(nftId: string): Promise<Lore[]> {
+  try {
+    const response = await clientApiAdapter.get(`/api/lore/nft/${nftId}/claimable-mission-lore`);
+    console.log('Claimable mission lore response:', response);
+    
+    // Handle different response formats
+    if (Array.isArray(response)) {
+      return response;
+    } else if (response && typeof response === 'object' && 'claimableLore' in response) {
+      return (response as any).claimableLore || [];
+    } else if (response && typeof response === 'object' && 'data' in response) {
+      return (response as any).data || [];
+    } else if (response && typeof response === 'object' && 'lore' in response) {
+      return (response as any).lore || [];
+    }
+    
+    return [];
+  } catch (error) {
+    console.error("Error getting claimable mission lore:", error);
+    return [];
   }
 }

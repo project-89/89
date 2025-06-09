@@ -294,11 +294,11 @@ export async function shareKnowledge(
     const share: KnowledgeShare = {
       id: shareId,
       knowledgeId,
-      agentId: targetAgentId,
+      targetAgentId: targetAgentId,
+      ownerId: requesterId,
       accessLevel,
-      createdBy: requesterId,
       status: "active",
-      expiresAt: expiresAt || null,
+      expiresAt: expiresAt || undefined,
       createdAt: now,
       updatedAt: now,
     };
@@ -311,7 +311,6 @@ export async function shareKnowledge(
 
     // Return created share
     return {
-      id: shareId,
       ...share,
     };
   } catch (error) {

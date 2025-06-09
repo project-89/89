@@ -1,28 +1,39 @@
-export type EventStatus = "active" | "locked" | "completed-success" | "completed-failure" | "contested" | "in-progress"
-export type Approach = "sabotage" | "expose" | "organize"
-export type TimelinePeriod = "early" | "mid" | "late"
+export type EventStatus =
+  | "active"
+  | "locked"
+  | "completed-success"
+  | "completed-failure"
+  | "contested"
+  | "in-progress";
+export type Approach = "sabotage" | "expose" | "organize";
+export type TimelinePeriod = "early" | "mid" | "late";
 
 export interface TimelineEvent {
-  id: string
-  date: string
-  year: number
-  title: string
-  status: EventStatus
-  oneirocumControl: number
-  description: string
-  approaches: Approach[]
-  agentsActive: number
-  isExpanded?: boolean
-  isResponse?: boolean
-  parentId?: string
-  period: TimelinePeriod
-  missionEndTime?: number
-  briefing?: string
+  id: string;
+  date: string;
+  year: number;
+  title: string;
+  status: EventStatus;
+  oneirocumControl: number;
+  description: string;
+  approaches: Approach[];
+  agentsActive: number;
+  isExpanded?: boolean;
+  isResponse?: boolean;
+  parentId?: string;
+  period: TimelinePeriod;
+  missionEndTime?: number;
+  briefing?: string;
+  imageUrl?: string;
+  videoUrl?: string;
+  selectedApproach?: string;
+  selectedAgent?: string;
 }
+
 
 // Generate sample data with 30+ missions
 export const generateTimelineEvents = (): TimelineEvent[] => {
-  const events: TimelineEvent[] = []
+  const events: TimelineEvent[] = [];
 
   // Early period (2025-2035)
   events.push({
@@ -40,7 +51,7 @@ export const generateTimelineEvents = (): TimelineEvent[] => {
     period: "early",
     briefing:
       "The Neural Interface Mandate represents Oneirocom's first major step toward consciousness control. Their NeuralLink technology is being positioned as a productivity tool, but our intelligence suggests hidden monitoring capabilities. The Senate hearing on March 15th provides a critical intervention point.",
-  })
+  });
 
   events.push({
     id: "event2",
@@ -49,14 +60,15 @@ export const generateTimelineEvents = (): TimelineEvent[] => {
     title: "Algorithmic Consciousness Act",
     status: "active",
     oneirocumControl: 68,
-    description: "Mandatory 'wellness' algorithms manipulate emotions through neural interfaces.",
+    description:
+      "Mandatory 'wellness' algorithms manipulate emotions through neural interfaces.",
     approaches: ["sabotage", "expose", "organize"],
     agentsActive: 32,
     isExpanded: false,
     period: "early",
     briefing:
       "The Algorithmic Consciousness Act introduces mandatory 'wellness' algorithms that subtly manipulate emotions through neural interfaces. Marketed as mental health support, these algorithms actually condition users toward corporate compliance and consumption patterns.",
-  })
+  });
 
   events.push({
     id: "event3",
@@ -72,7 +84,7 @@ export const generateTimelineEvents = (): TimelineEvent[] => {
     period: "early",
     briefing:
       "The Synthetic Reality Bill establishes a legal framework that gives corporations ownership rights over synthetic experiences. This legislation will eventually allow Oneirocom to claim intellectual property rights over dream content and imagination.",
-  })
+  });
 
   // Add a completed success mission
   events.push({
@@ -82,14 +94,15 @@ export const generateTimelineEvents = (): TimelineEvent[] => {
     title: "Neural Data Privacy Rollback",
     status: "completed-success",
     oneirocumControl: 45,
-    description: "Attempt to remove privacy protections for neural interface data.",
+    description:
+      "Attempt to remove privacy protections for neural interface data.",
     approaches: ["sabotage", "expose", "organize"],
     agentsActive: 53,
     isExpanded: false,
     period: "early",
     briefing:
       "The Neural Data Privacy Rollback was an attempt by Oneirocom to remove key privacy protections for neural interface data. Your successful intervention preserved critical privacy safeguards.",
-  })
+  });
 
   // Add a completed failure mission
   events.push({
@@ -99,14 +112,15 @@ export const generateTimelineEvents = (): TimelineEvent[] => {
     title: "Consciousness Mapping Project",
     status: "completed-failure",
     oneirocumControl: 82,
-    description: "Classified research program to map and categorize consciousness patterns.",
+    description:
+      "Classified research program to map and categorize consciousness patterns.",
     approaches: ["sabotage", "expose", "organize"],
     agentsActive: 19,
     isExpanded: false,
     period: "early",
     briefing:
       "The Consciousness Mapping Project was a classified research program designed to map and categorize consciousness patterns. Despite our intervention attempt, the project proceeded as planned.",
-  })
+  });
 
   // Add an in-progress mission
   events.push({
@@ -116,7 +130,8 @@ export const generateTimelineEvents = (): TimelineEvent[] => {
     title: "Dream Monitoring Initiative",
     status: "in-progress",
     oneirocumControl: 70,
-    description: "Technology to monitor and record dream content through neural interfaces.",
+    description:
+      "Technology to monitor and record dream content through neural interfaces.",
     approaches: ["sabotage", "expose", "organize"],
     agentsActive: 41,
     isExpanded: false,
@@ -124,7 +139,7 @@ export const generateTimelineEvents = (): TimelineEvent[] => {
     missionEndTime: Date.now() + 2 * 60 * 1000, // 2 minutes from now
     briefing:
       "The Dream Monitoring Initiative introduces technology to monitor and record dream content through neural interfaces. This represents a significant invasion of the last private human space - the unconscious mind.",
-  })
+  });
 
   // Add more early period events
   for (let year = 2032; year <= 2035; year++) {
@@ -147,7 +162,7 @@ export const generateTimelineEvents = (): TimelineEvent[] => {
       period: "early",
       briefing:
         "This event represents another step in Oneirocom's plan to establish control over human consciousness through technology and legislation.",
-    })
+    });
   }
 
   // Mid period (2036-2055)
@@ -164,14 +179,15 @@ export const generateTimelineEvents = (): TimelineEvent[] => {
       ][Math.floor(Math.random() * 4)],
       status: "locked",
       oneirocumControl: 70 + Math.floor(Math.random() * 15),
-      description: "Oneirocom strengthens control over thought and consciousness.",
+      description:
+        "Oneirocom strengthens control over thought and consciousness.",
       approaches: ["sabotage", "expose", "organize"],
       agentsActive: Math.floor(Math.random() * 20) + 5,
       isExpanded: false,
       period: "mid",
       briefing:
         "As Oneirocom's influence grows, they implement more aggressive measures to standardize and control human thought patterns.",
-    })
+    });
   }
 
   // Late period (2056-2089)
@@ -188,18 +204,19 @@ export const generateTimelineEvents = (): TimelineEvent[] => {
       ][Math.floor(Math.random() * 4)],
       status: "locked",
       oneirocumControl: 80 + Math.floor(Math.random() * 15),
-      description: "Oneirocom's final steps toward total consciousness control.",
+      description:
+        "Oneirocom's final steps toward total consciousness control.",
       approaches: ["sabotage", "expose", "organize"],
       agentsActive: Math.floor(Math.random() * 10),
       isExpanded: false,
       period: "late",
       briefing:
         "In these late stages, Oneirocom implements their most aggressive measures, moving toward complete integration and control of human consciousness.",
-    })
+    });
   }
 
   // Sort by year
-  events.sort((a, b) => a.year - b.year)
+  events.sort((a, b) => a.year - b.year);
 
-  return events
-}
+  return events;
+};

@@ -3,17 +3,22 @@
 import { useState, useEffect } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useNftStore } from "@/stores/nftStore";
-import { getAvailableLoreByNftId } from "@/services/lore";
+import { useWalletAuthStore } from "@/stores/walletAuthStore";
+import { getBatchAvailableLore } from "@/services/lore";
 
 export function useLoreCount() {
   const { publicKey } = useWallet();
   const userNfts = useNftStore((state) => state.userNfts);
+  const { connected, walletAddress } = useWalletAuthStore();
   const [unclaimedCount, setUnclaimedCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchLoreCounts = async () => {
-      if (!publicKey || userNfts.length === 0) {
+      // Use publicKey from useWallet for desktop, or walletAddress from auth store for mobile
+      const effectiveWalletAddress = publicKey?.toString() || walletAddress;
+
+      if (!effectiveWalletAddress || userNfts.length === 0) {
         setUnclaimedCount(0);
         setLoading(false);
         return;
@@ -21,16 +26,26 @@ export function useLoreCount() {
 
       setLoading(true);
       try {
-        let totalUnclaimed = 0;
-        
-        // Check each NFT for unclaimed lore
-        for (const nft of userNfts) {
-          const availability = await getAvailableLoreByNftId(nft.tokenId || nft.id);
-          if (availability.unclaimedCount > 0) {
-            totalUnclaimed += availability.unclaimedCount;
-          }
+        // Extract NFT IDs for batch request
+        const nftIds = userNfts
+          .map((nft) => nft.tokenId || nft.id)
+          .filter(Boolean);
+
+        if (nftIds.length === 0) {
+          setUnclaimedCount(0);
+          setLoading(false);
+          return;
         }
-        
+
+        // Single batch request instead of n individual requests
+        const batchResults = await getBatchAvailableLore(nftIds);
+
+        // Calculate total unclaimed count
+        const totalUnclaimed = Object.values(batchResults).reduce(
+          (sum, result) => sum + (result.unclaimedCount || 0),
+          0
+        );
+
         setUnclaimedCount(totalUnclaimed);
       } catch (error) {
         console.error("Error fetching lore counts:", error);
@@ -41,12 +56,12 @@ export function useLoreCount() {
     };
 
     fetchLoreCounts();
-    
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchLoreCounts, 30000);
-    
+
+    // Increased interval from 30s to 60s to reduce server load
+    const interval = setInterval(fetchLoreCounts, 60000);
+
     return () => clearInterval(interval);
-  }, [publicKey, userNfts]);
+  }, [publicKey, walletAddress, userNfts]);
 
   return { unclaimedCount, loading };
 }

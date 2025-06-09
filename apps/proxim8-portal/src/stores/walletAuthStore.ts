@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { AuthUser } from "@/types/auth";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 
 import bs58 from "bs58";
@@ -13,6 +13,7 @@ import {
   clearAllMobileData,
   getAndClearCallbackSuccess,
 } from "@/utils/mobileDetection";
+import { reset as resetAnalytics } from "@/utils/analytics";
 
 // Platform detection
 const isMobile = (): boolean => {
@@ -44,6 +45,10 @@ interface WalletAuthState {
   // Error state
   error: string | null;
 
+  // Auth retry tracking
+  lastAuthAttempt: number | null;
+  authFailureCount: number;
+
   // Internal state
   _hasInitialized: boolean;
   _walletAdapter: any; // Store reference to desktop wallet adapter
@@ -64,6 +69,7 @@ interface WalletAuthState {
   connect: () => Promise<boolean>;
   authenticate: () => Promise<boolean>;
   disconnect: () => void;
+  validateSession: () => Promise<boolean>;
 
   // Platform-specific actions
   connectDesktop: () => Promise<boolean>;
@@ -80,6 +86,10 @@ interface WalletAuthState {
   checkMobileConnection: () => void;
   startMobileConnectionPolling: () => void;
   stopMobileConnectionPolling: () => void;
+
+  // Auth retry utilities
+  canRetryAuth: () => boolean;
+  resetAuthRetry: () => void;
 }
 
 // Helper function to call auth API
@@ -151,6 +161,51 @@ const callAuthAPI = async (
   }
 };
 
+// Helper function to validate existing auth session
+const validateAuthSession = async (): Promise<{
+  success: boolean;
+  user?: AuthUser;
+}> => {
+  try {
+    const response = await fetch("/api/auth/status", {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include", // Include cookies
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        // Not authenticated
+        return { success: false };
+      }
+      throw new Error(
+        `Auth validation error: ${response.status} ${response.statusText}`
+      );
+    }
+
+    const data = await response.json();
+    console.log(
+      "[WalletAuthStore] validateAuthSession: Response from /api/auth/status:",
+      data
+    );
+
+    if (data.authenticated && data.walletAddress) {
+      const userObject: AuthUser = {
+        walletAddress: data.walletAddress,
+        isAdmin: data.isAdmin || false,
+      };
+      return { success: true, user: userObject };
+    }
+
+    return { success: false };
+  } catch (error) {
+    console.error("[WalletAuthStore] Auth validation failed:", error);
+    return { success: false };
+  }
+};
+
 // Check if we're in SSR
 const isServer = typeof window === "undefined";
 
@@ -168,6 +223,8 @@ const store = create<WalletAuthState>()(
       isConnecting: false,
       isAuthenticating: false,
       error: null,
+      lastAuthAttempt: null,
+      authFailureCount: 0,
       _hasInitialized: false,
       _walletAdapter: null,
       _connectionCheckInterval: null,
@@ -238,25 +295,48 @@ const store = create<WalletAuthState>()(
           ? desktopPublicKey.toString()
           : null;
 
+        // CRITICAL FIX: Don't reset auth state if we're in the middle of authenticating
+        if (currentState.isAuthenticating) {
+          // Still update connection state if needed, but preserve auth state
+          if (
+            desktopAdapterConnected &&
+            newAddress &&
+            !currentState.connected
+          ) {
+            set((state) => ({
+              ...state,
+              walletAddress: newAddress,
+              platform: "desktop",
+              connected: true,
+              // Preserve existing auth state during authentication
+            }));
+          }
+          return;
+        }
+
         if (desktopAdapterConnected && newAddress) {
           // Adapter is passively connected (e.g., auto-connect by adapter library)
           // Update store to reflect this, including setting our 'connected' to true.
           if (
             currentState.walletAddress !== newAddress ||
             currentState.platform !== "desktop" ||
-            !currentState.connected || // If our store thought it wasn't connected
-            currentState.isAuthenticated // Or if it was mistakenly authenticated from persistence
+            !currentState.connected // If our store thought it wasn't connected
           ) {
+            // Only reset auth if wallet address changed
+            const shouldResetAuth = currentState.walletAddress !== newAddress;
+
             set((state) => ({
               ...state,
               walletAddress: newAddress,
               platform: "desktop",
               connected: true, // Set our application-level connected state to true
-              isAuthenticated: false, // Always reset auth on passive desktop wallet detection
-              user: null, // Always reset user
+              // Only reset auth if wallet changed
+              isAuthenticated: shouldResetAuth ? false : state.isAuthenticated,
+              user: shouldResetAuth ? null : state.user,
             }));
+
             console.log(
-              `[WalletAuthStore] Desktop wallet passively detected & synced: ${newAddress}. Store connected: true, isAuthenticated: false.`
+              `[WalletAuthStore] Desktop wallet detected & synced: ${newAddress}. Auth reset: ${shouldResetAuth}`
             );
           }
         } else if (
@@ -264,6 +344,7 @@ const store = create<WalletAuthState>()(
           currentState.platform === "desktop"
         ) {
           // Adapter disconnected passively
+
           if (currentState.connected || currentState.walletAddress) {
             set((state) => ({
               ...state,
@@ -399,11 +480,16 @@ const store = create<WalletAuthState>()(
                     isAuthenticated: true,
                     user: authApiResult.user,
                     isAuthenticating: false,
+                    isConnecting: false, // Also clear connecting state
                     error: null,
                   }));
                   console.log(
                     "[WalletAuthStore] Mobile authentication successful via sign callback."
                   );
+                  // Clear the session flag on successful auth
+                  if (typeof window !== "undefined") {
+                    sessionStorage.removeItem("auth_attempted");
+                  }
                   currentState.stopMobileConnectionPolling();
                 } else {
                   set((state) => ({
@@ -537,6 +623,68 @@ const store = create<WalletAuthState>()(
         }
       },
 
+      validateSession: async () => {
+        const currentState = get();
+        console.log(
+          "[WalletAuthStore] validateSession: Validating existing auth session"
+        );
+
+        // Only validate if we think we're authenticated
+        if (!currentState.isAuthenticated || !currentState.walletAddress) {
+          console.log(
+            "[WalletAuthStore] validateSession: Not authenticated, skipping validation"
+          );
+          return false;
+        }
+
+        try {
+          const result = await validateAuthSession();
+
+          if (result.success && result.user) {
+            // Verify the wallet address matches
+            if (result.user.walletAddress === currentState.walletAddress) {
+              console.log(
+                "[WalletAuthStore] validateSession: Session is valid"
+              );
+              // Update user data in case it changed
+              set({ user: result.user });
+              return true;
+            } else {
+              console.warn(
+                "[WalletAuthStore] validateSession: Wallet address mismatch"
+              );
+              // Clear auth state
+              set({
+                isAuthenticated: false,
+                user: null,
+              });
+              return false;
+            }
+          } else {
+            console.log(
+              "[WalletAuthStore] validateSession: Session is invalid"
+            );
+            // Clear auth state
+            set({
+              isAuthenticated: false,
+              user: null,
+            });
+            return false;
+          }
+        } catch (error) {
+          console.error(
+            "[WalletAuthStore] validateSession: Error validating session:",
+            error
+          );
+          // Clear auth state on error
+          set({
+            isAuthenticated: false,
+            user: null,
+          });
+          return false;
+        }
+      },
+
       disconnect: async () => {
         console.log("[WalletAuthStore] disconnect: Initiated.");
         const currentState = get();
@@ -597,6 +745,9 @@ const store = create<WalletAuthState>()(
           );
         }
 
+        // Reset analytics on disconnect
+        resetAnalytics();
+
         // Clear all client-side store state
         set({
           connected: false,
@@ -618,11 +769,11 @@ const store = create<WalletAuthState>()(
         );
 
         if (typeof window !== "undefined") {
-          sessionStorage.removeItem("auth_attempted");
+          sessionStorage.removeItem("auth_attempted_address");
           // Clear wallet-auth-store from localStorage to ensure clean state
           localStorage.removeItem("wallet-auth-store");
           console.log(
-            "[WalletAuthStore] disconnect: Cleared localStorage wallet-auth-store and sessionStorage auth_attempted."
+            "[WalletAuthStore] disconnect: Cleared localStorage wallet-auth-store and sessionStorage auth_attempted_address."
           );
         }
       },
@@ -663,17 +814,22 @@ const store = create<WalletAuthState>()(
             !currentState.connected ||
             currentState.walletAddress !== adapter.publicKey.toString()
           ) {
+            const newAddress = adapter.publicKey.toString();
+            const shouldResetAuth = currentState.walletAddress !== newAddress;
+
             set((state) => ({
               ...state,
               connected: true,
-              walletAddress: adapter.publicKey.toString(),
+              walletAddress: newAddress,
               platform: "desktop",
-              isAuthenticated: false,
-              user: null,
+              // Only reset auth if wallet changed
+              isAuthenticated: shouldResetAuth ? false : state.isAuthenticated,
+              user: shouldResetAuth ? null : state.user,
               isConnecting: false,
             }));
             console.log(
-              "[WalletAuthStore] connectDesktop: Store updated to reflect pre-existing adapter connection."
+              "[WalletAuthStore] connectDesktop: Store updated. Auth reset: " +
+                shouldResetAuth
             );
           }
           return true; // Successfully "connected" from our store's perspective
@@ -707,6 +863,8 @@ const store = create<WalletAuthState>()(
           // After attempting connection, re-check adapter state
           if (adapter.connected && adapter.publicKey) {
             const newAddress = adapter.publicKey.toString();
+            const shouldResetAuth = currentState.walletAddress !== newAddress;
+
             console.log(
               `[WalletAuthStore] connectDesktop: Adapter connected successfully. Wallet: ${newAddress}`
             );
@@ -715,8 +873,9 @@ const store = create<WalletAuthState>()(
               connected: true,
               walletAddress: newAddress,
               platform: "desktop",
-              isAuthenticated: false, // Explicitly set to false on connect
-              user: null, // Clear user on new connect
+              // Only reset auth if wallet changed
+              isAuthenticated: shouldResetAuth ? false : state.isAuthenticated,
+              user: shouldResetAuth ? null : state.user,
               isConnecting: false,
             }));
             return true;
@@ -748,6 +907,7 @@ const store = create<WalletAuthState>()(
       authenticateDesktop: async () => {
         console.log("[WalletAuthStore] authenticateDesktop: CALLED");
         const currentState = get();
+
         console.log(
           "[WalletAuthStore] authenticateDesktop: Initial current state:",
           {
@@ -777,20 +937,35 @@ const store = create<WalletAuthState>()(
           return false; // Already authenticating
         }
 
+        // Update last auth attempt timestamp
+        set({ lastAuthAttempt: Date.now() });
+
         get().setLoading(undefined, true);
         get().clearError();
 
         try {
           // Check if we already tried auth in this session (to prevent loops)
           if (typeof window !== "undefined") {
-            const hasTriedAuth = sessionStorage.getItem("auth_attempted");
-            console.log(
-              "[WalletAuthStore] authenticateDesktop: sessionStorage 'auth_attempted' check:",
-              { hasTriedAuth, isAuthenticated: currentState.isAuthenticated }
+            const authAttemptedAddress = sessionStorage.getItem(
+              "auth_attempted_address"
             );
-            if (hasTriedAuth && currentState.isAuthenticated) {
+
+            console.log(
+              "[WalletAuthStore] authenticateDesktop: sessionStorage 'auth_attempted_address' check:",
+              {
+                authAttemptedAddress,
+                currentWalletAddress: currentState.walletAddress,
+                isAuthenticated: currentState.isAuthenticated,
+              }
+            );
+
+            // If we already attempted auth for this wallet address and are authenticated, skip
+            if (
+              authAttemptedAddress === currentState.walletAddress &&
+              currentState.isAuthenticated
+            ) {
               console.log(
-                "[WalletAuthStore] authenticateDesktop: Bailing out because auth_attempted is set and already authenticated."
+                "[WalletAuthStore] authenticateDesktop: Already authenticated for this wallet address, skipping re-auth."
               );
               get().setLoading(undefined, false);
               return true;
@@ -823,12 +998,14 @@ const store = create<WalletAuthState>()(
             "[WalletAuthStore] authenticateDesktop: Attempting to call adapter.signMessage()..."
           );
           const signatureBytes = await adapter.signMessage(messageBytes);
+
           console.log(
             "[WalletAuthStore] authenticateDesktop: adapter.signMessage() successful. Signature bytes received."
           );
           const signature = bs58.encode(signatureBytes);
 
           // Call auth API
+
           const authResult = await callAuthAPI(
             currentState.walletAddress,
             signature,
@@ -838,20 +1015,31 @@ const store = create<WalletAuthState>()(
           if (authResult.success && authResult.user) {
             get().setAuthenticated(true, authResult.user);
 
-            // Mark auth as attempted to prevent loops
+            // Clear auth session flag on successful auth (allow future sessions)
             if (typeof window !== "undefined") {
-              sessionStorage.setItem("auth_attempted", "true");
+              sessionStorage.removeItem("auth_attempted");
             }
 
             console.log("[WalletAuthStore] Desktop authentication successful");
             return true;
           } else {
+            // Increment failure count
+            set((state) => ({ authFailureCount: state.authFailureCount + 1 }));
             get().setError("Authentication failed");
             return false;
           }
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : "Authentication failed";
+
+          // Increment failure count on error (unless user cancelled)
+          if (
+            !errorMessage.includes("User rejected") &&
+            !errorMessage.includes("cancelled")
+          ) {
+            set((state) => ({ authFailureCount: state.authFailureCount + 1 }));
+          }
+
           get().setError(errorMessage);
           console.error(
             "[WalletAuthStore] Desktop authentication error:",
@@ -1080,23 +1268,41 @@ const store = create<WalletAuthState>()(
         const currentState = useWalletAuthStore.getState();
 
         console.log(
-          `[WalletAuthStore] initialize: Starting. Detected: ${currentDetectedPlatform}. Current store state before desktop/mobile specific logic: platform=${currentState.platform}, connected=${currentState.connected}, walletAddress=${currentState.walletAddress}`
+          `[WalletAuthStore] initialize: Starting. Detected: ${currentDetectedPlatform}. Current store state before desktop/mobile specific logic: platform=${currentState.platform}, connected=${currentState.connected}, walletAddress=${currentState.walletAddress}, isAuthenticated=${currentState.isAuthenticated}`
         );
 
         if (currentDetectedPlatform === "desktop") {
-          useWalletAuthStore.setState((state) => ({
-            ...state, // Preserve existing state like connected and walletAddress if set by sync
-            platform: "desktop",
-            // connected: false, // DO NOT blindly set connected: false. Let syncWithDesktopWallet handle this based on adapter.
-            isAuthenticated: false, // ALWAYS reset authentication for a new desktop session
-            user: null, // ALWAYS reset user
-            mobileSessionToken: null, // Clear any stale mobile data
-            mobilePhantomPublicKey: null,
-            error: null, // Clear any errors from previous session
-          }));
-          console.log(
-            `[WalletAuthStore] initialize: Desktop session. Ensured isAuthenticated is false. Platform set to 'desktop'. Current connected: ${useWalletAuthStore.getState().connected}`
-          );
+          // For desktop, we need to allow time for auto-connect to complete
+          // if it's enabled, so we delay the initialization slightly
+          setTimeout(() => {
+            const state = useWalletAuthStore.getState();
+            console.log(
+              `[WalletAuthStore] initialize: Desktop initialization (delayed). Current state: connected=${state.connected}, walletAddress=${state.walletAddress}, platform=${state.platform}`
+            );
+
+            useWalletAuthStore.setState((prevState) => ({
+              ...prevState, // Preserve existing state like connected and walletAddress if set by sync
+              platform: "desktop",
+              // Don't reset isAuthenticated and user if they exist in persisted state
+              // Only clear them if wallet address changed
+              isAuthenticated:
+                prevState.walletAddress === currentState.walletAddress
+                  ? prevState.isAuthenticated
+                  : false,
+              user:
+                prevState.walletAddress === currentState.walletAddress
+                  ? prevState.user
+                  : null,
+              mobileSessionToken: null, // Clear any stale mobile data
+              mobilePhantomPublicKey: null,
+              error: null, // Clear any errors from previous session
+            }));
+
+            const finalState = useWalletAuthStore.getState();
+            console.log(
+              `[WalletAuthStore] initialize: Desktop session initialized. Final state: connected=${finalState.connected}, isAuthenticated=${finalState.isAuthenticated}, walletAddress=${finalState.walletAddress}`
+            );
+          }, 100); // Small delay to allow auto-connect to complete
         } else {
           // Mobile logic (relatively unchanged, but ensure it also respects prior connection state if applicable)
           if (currentState.platform !== "mobile") {
@@ -1126,35 +1332,50 @@ const store = create<WalletAuthState>()(
         }
 
         // Auto-authentication logic for early connections (e.g. mobile callback, or if desktop autoconnect was on)
+        // REDUCED timeout and added session-based throttling to prevent auth loops
         setTimeout(() => {
           const state = useWalletAuthStore.getState(); // Get raw store state
           console.log(
-            `[WalletAuthStore] initialize (post-timeout auto-auth check): State before deciding to call authenticate: connected=${state.connected}, authenticated=${state.isAuthenticated}, platform='${state.platform}', isAuthenticating=${state.isAuthenticating}, currentDetectedPlatform=${currentDetectedPlatform}`
+            `[WalletAuthStore] initialize: Auto-auth check. Platform: ${state.platform}, connected: ${state.connected}, authenticated: ${state.isAuthenticated}, isAuthenticating: ${state.isAuthenticating}`
           );
+
+          // Check if we already tried auth in this session to prevent loops
+          const hasTriedAuth =
+            typeof window !== "undefined"
+              ? sessionStorage.getItem("auth_attempted")
+              : null;
+
           if (
             state.connected &&
             !state.isAuthenticated &&
-            !state.isAuthenticating
+            !state.isAuthenticating &&
+            !hasTriedAuth // Don't auto-auth if we already tried in this session
           ) {
             if (
               state.platform === "desktop" &&
               currentDetectedPlatform === "desktop"
             ) {
               console.log(
-                `!!!!!!!!!! [WalletAuthStore] initialize (setTimeout): Desktop platform - Condition MET to call authenticate(). connected=${state.connected}, !isAuth=${!state.isAuthenticated}, !isAuthING=${!state.isAuthenticating}, platform=${state.platform}. CALLING state.authenticate() NOW. !!!!!!!!!!!`
+                `[WalletAuthStore] initialize (setTimeout): Desktop platform - Condition MET to call authenticate(). Setting session flag.`
               );
+              if (typeof window !== "undefined") {
+                sessionStorage.setItem("auth_attempted", "true");
+              }
               state.authenticate();
             } else if (
               state.platform === "mobile" &&
               currentDetectedPlatform === "mobile"
             ) {
               console.log(
-                `[WalletAuthStore] initialize (setTimeout): Mobile platform - Condition MET to call authenticate(). connected=${state.connected}, !isAuth=${!state.isAuthenticated}, !isAuthING=${!state.isAuthenticating}, platform=${state.platform}. CALLING state.authenticate() NOW.`
+                `[WalletAuthStore] initialize (setTimeout): Mobile platform - Condition MET to call authenticate(). Setting session flag.`
               );
+              if (typeof window !== "undefined") {
+                sessionStorage.setItem("auth_attempted", "true");
+              }
               state.authenticate();
             } else {
               console.warn(
-                `[WalletAuthStore] initialize (setTimeout): Auto-auth condition SKIPPED. Store platform '${state.platform}' !== initial detected platform '${currentDetectedPlatform}', or not desktop.`
+                `[WalletAuthStore] initialize (setTimeout): Auto-auth condition SKIPPED. Store platform '${state.platform}' !== initial detected platform '${currentDetectedPlatform}'.`
               );
             }
           } else if (
@@ -1168,14 +1389,42 @@ const store = create<WalletAuthState>()(
             state.stopMobileConnectionPolling();
           } else {
             console.log(
-              "[WalletAuthStore] initialize (post-timeout auto-auth check): Conditions for early auto-auth not met."
+              "[WalletAuthStore] initialize (post-timeout auto-auth check): Conditions for early auto-auth not met.",
+              { hasTriedAuth }
             );
+            state.authenticate();
           }
-        }, 250);
+        }, 100); // Reduced from 250ms to 100ms
 
         console.log(
-          `[WalletAuthStore] initialize: Completed. Store platform is now '${useWalletAuthStore.getState().platform}'.`
+          `[WalletAuthStore] initialize: Setup completed for ${currentDetectedPlatform} platform.`
         );
+      },
+
+      // Auth retry utilities
+      canRetryAuth: () => {
+        const currentState = get();
+        const lastAuthAttempt = currentState.lastAuthAttempt;
+        const authFailureCount = currentState.authFailureCount;
+
+        if (lastAuthAttempt && authFailureCount < 3) {
+          const currentTime = Date.now();
+          const timeSinceLastAttempt = currentTime - lastAuthAttempt;
+          const retryInterval = 60000; // 1 minute in milliseconds
+
+          if (timeSinceLastAttempt >= retryInterval) {
+            return true;
+          }
+        }
+        return false;
+      },
+
+      resetAuthRetry: () => {
+        const currentState = get();
+        set({
+          lastAuthAttempt: Date.now(),
+          authFailureCount: 0,
+        });
       },
     }),
     {
@@ -1200,8 +1449,12 @@ const store = create<WalletAuthState>()(
         mobileSessionToken: state.mobileSessionToken,
         mobilePhantomPublicKey: state.mobilePhantomPublicKey,
         _hasInitialized: state._hasInitialized,
-        // Don't persist loading states, errors, adapter references, or intervals
-        // isAuthenticating should NOT be persisted as it's a transient state
+        // NEVER persist transient states that cause loops:
+        // isConnecting: false,     <- NEVER PERSIST
+        // isAuthenticating: false, <- NEVER PERSIST
+        // error: null,             <- NEVER PERSIST
+        // _walletAdapter: null,    <- NEVER PERSIST
+        // _connectionCheckInterval: null, <- NEVER PERSIST
       }),
     }
   )
@@ -1224,6 +1477,8 @@ export const useWalletAuth = () => {
     isConnecting,
     isAuthenticating,
     error,
+    lastAuthAttempt,
+    authFailureCount,
     _hasInitialized,
     _walletAdapter, // Current adapter from our store for comparison & use in returned methods if needed
     connect,
@@ -1232,26 +1487,48 @@ export const useWalletAuth = () => {
     clearError,
     syncWithDesktopWallet,
     setWalletAdapter,
+    validateSession,
+    canRetryAuth,
+    resetAuthRetry,
   } = storeState;
 
+  // Track adapter changes with more detail
   useEffect(() => {
     const currentAdapterFromHook = wallet?.adapter || null; // Get adapter from wallet object, can be null
 
     if (currentAdapterFromHook && _walletAdapter !== currentAdapterFromHook) {
-      console.log(
-        "[useWalletAuth effect] Wallet adapter instance changed/received. Setting in store:",
-        currentAdapterFromHook.name
-      );
       setWalletAdapter(currentAdapterFromHook);
     } else if (!currentAdapterFromHook && _walletAdapter) {
-      console.log(
-        "[useWalletAuth effect] Adapter from useWallet() is null, but store had one. Clearing from store."
-      );
       setWalletAdapter(null);
     }
-    // Depends on the `wallet` object from useWallet (which contains the adapter),
-    // the store's current _walletAdapter for comparison, and the action to set it.
-  }, [wallet, _walletAdapter, setWalletAdapter]);
+    // Only depend on wallet?.adapter, not the setWalletAdapter function
+  }, [wallet?.adapter, _walletAdapter]); // Fixed dependencies
+
+  // Memoize the adapter public key string to prevent excessive re-renders
+  const adapterPublicKeyString = useMemo(() => {
+    return _walletAdapter?.publicKey?.toString() || null;
+  }, [_walletAdapter?.publicKey]);
+
+  // Separate effect to sync wallet state changes
+  useEffect(() => {
+    if (_walletAdapter) {
+      const adapterConnected = _walletAdapter.connected;
+      const adapterPublicKey = _walletAdapter.publicKey;
+
+      // Only sync if not authenticating to prevent interruptions
+      if (!isAuthenticating) {
+        syncWithDesktopWallet(adapterConnected, adapterPublicKey);
+      }
+    }
+  }, [
+    _walletAdapter?.connected,
+    adapterPublicKeyString, // Use memoized string
+    isAuthenticating,
+    connected,
+    walletAddress,
+    platform,
+    syncWithDesktopWallet,
+  ]);
 
   // Initialize on first mount of any component using the hook, only on client
   if (
@@ -1266,25 +1543,12 @@ export const useWalletAuth = () => {
   // Effect for automatic authentication on desktop after connection
   useEffect(() => {
     if (typeof window !== "undefined" && _hasInitialized) {
-      console.log(
-        "[useWalletAuth effect] Checking conditions for DESKTOP auth:",
-        {
-          platform,
-          connected,
-          isAuthenticated,
-          isAuthenticating,
-          _hasInitialized,
-        }
-      );
       if (
         platform === "desktop" &&
         connected &&
         !isAuthenticated &&
         !isAuthenticating
       ) {
-        console.log(
-          "[useWalletAuth effect] Desktop is connected, not authenticated, and not currently authenticating. Triggering authenticate()."
-        );
         authenticate(); // Directly use the destructured authenticate action
       }
     }
@@ -1300,25 +1564,12 @@ export const useWalletAuth = () => {
   // Effect for automatic authentication on MOBILE after connection
   useEffect(() => {
     if (typeof window !== "undefined" && _hasInitialized) {
-      console.log(
-        "[useWalletAuth effect] Checking conditions for MOBILE auth:",
-        {
-          platform,
-          connected,
-          isAuthenticated,
-          isAuthenticating,
-          _hasInitialized,
-        }
-      );
       if (
         platform === "mobile" &&
         connected &&
         !isAuthenticated &&
         !isAuthenticating
       ) {
-        console.log(
-          "[useWalletAuth effect] Mobile is connected, not authenticated, and not currently authenticating. Triggering authenticate()."
-        );
         authenticate(); // This will call authenticateMobile via the generic authenticate action
       }
     }
@@ -1341,12 +1592,16 @@ export const useWalletAuth = () => {
     isConnecting,
     isAuthenticating,
     error,
+    authFailureCount,
 
     // Actions
     connect,
     authenticate,
     disconnect,
     clearError,
+    validateSession,
+    canRetryAuth,
+    resetAuthRetry,
 
     // Internal methods
     syncWithDesktopWallet,

@@ -1,26 +1,33 @@
 import { Router } from "express";
-import { protectedEndpoint, fingerprintWriteEndpoint } from "../middleware/chains.middleware";
+import { protectedEndpoint } from "../middleware/chains.middleware";
+import { z } from "zod";
 import {
-  ProfileCreateSchema,
-  ProfileUpdateSchema,
-  ProfileGetSchema,
-  ProfileSearchSchema,
-} from "../schemas";
-import {
-  handleCreateProfile,
-  handleUpdateProfile,
-  handleGetProfile,
-  handleSearchProfiles,
+  handleGetProfileByWallet,
 } from "../endpoints";
 
 const router = Router();
 
-// Profile creation only requires fingerprint verification
-router.post("/profiles", ...fingerprintWriteEndpoint(ProfileCreateSchema), handleCreateProfile);
+/**
+ * MIGRATED: Removed CRUD routes
+ * 
+ * DELETED ROUTES - Use auto-CRUD instead:
+ * - POST /profiles → POST /api/model/profile
+ * - GET /profiles/:id → GET /api/model/profile/:id
+ * - PATCH /profiles/:id → PATCH /api/model/profile/:id
+ * - GET /profiles → GET /api/model/profile
+ * 
+ * KEPT: Business logic routes only
+ */
 
-// These operations require full authentication and ownership verification
-router.get("/profiles/:id", ...protectedEndpoint(ProfileGetSchema), handleGetProfile);
-router.patch("/profiles/:id", ...protectedEndpoint(ProfileUpdateSchema), handleUpdateProfile);
-router.get("/profiles", ...protectedEndpoint(ProfileSearchSchema), handleSearchProfiles);
+// Special lookup by wallet address
+router.get(
+  "/profiles/wallet/:walletAddress", 
+  ...protectedEndpoint(z.object({
+    params: z.object({
+      walletAddress: z.string()
+    })
+  })), 
+  handleGetProfileByWallet
+);
 
 export default router;

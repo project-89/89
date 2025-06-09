@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import { ERROR_MESSAGES } from '../constants';
 import {
-  DeleteVideoRequest,
   GenerateVideoRequest,
   GetUserVideosRequest,
   GetVideoStatusRequest,
@@ -9,7 +8,6 @@ import {
   RefreshVideoUrlsRequest,
 } from '../schemas';
 import {
-  deleteVideo,
   generateVideo,
   getUserVideos,
   getVideoStatus,
@@ -17,6 +15,15 @@ import {
   refreshVideoUrls,
 } from '../services/video.service';
 import { ApiError, sendError, sendSuccess } from '../utils';
+
+/**
+ * MIGRATED: Removed pure CRUD handlers
+ * 
+ * DELETED:
+ * - handleDeleteVideo → Use DELETE /api/model/videoGeneration/:id
+ * 
+ * KEPT: Business logic handlers only
+ */
 
 /**
  * Generate a new video for an NFT
@@ -81,24 +88,6 @@ export async function handlePublishVideo(req: Request, res: Response) {
       userId
     );
     sendSuccess(res, video, 'Video published successfully');
-  } catch (error) {
-    const apiError = ApiError.from(error, 500, ERROR_MESSAGES.INTERNAL_ERROR);
-    sendError(res, apiError, apiError.statusCode);
-  }
-}
-
-/**
- * Delete video generation
- */
-export async function handleDeleteVideo(req: Request, res: Response) {
-  try {
-    // TODO: Get user from auth middleware
-    const userId = 'temp-user-id'; // Placeholder until auth is integrated
-    const deleted = await deleteVideo(
-      req as unknown as DeleteVideoRequest,
-      userId
-    );
-    sendSuccess(res, { deleted }, 'Video deleted successfully');
   } catch (error) {
     const apiError = ApiError.from(error, 500, ERROR_MESSAGES.INTERNAL_ERROR);
     sendError(res, apiError, apiError.statusCode);

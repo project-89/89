@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { API_BASE_URL } from "@/config";
+import PostHogClient from "@/lib/posthog";
 
 // Force dynamic rendering since methods use cookies for authentication
 export const dynamic = "force-dynamic";
 
+const posthog = PostHogClient();
+
 /**
- * Track analytics event
+ * Track analytics event using PostHog
  * @route POST /api/analytics
  */
 export async function POST(request: NextRequest) {
@@ -20,44 +22,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get the auth token from cookies (optional)
+    // Use auth token as distinctId if available
     const authToken = request.cookies.get("authToken")?.value;
 
-    const headers: HeadersInit = {
-      "Content-Type": "application/json",
-    };
+    // Extract request metadata
+    const userAgent = request.headers.get("user-agent") || "";
+    const referer = request.headers.get("referer") || "";
+    const ip =
+      request.headers.get("x-forwarded-for") ||
+      request.headers.get("x-real-ip") ||
+      "";
 
-    if (authToken) {
-      headers["Authorization"] = `Bearer ${authToken}`;
-    }
-
-    // Forward the request to the backend API
-    const response = await fetch(`${API_BASE_URL}/analytics/track`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        eventType,
-        eventData: eventData || {},
-        timestamp: new Date().toISOString(),
-        source: "web",
-        // Include user agent info
-        userAgent: request.headers.get("user-agent") || "",
-        referer: request.headers.get("referer") || "",
-        // Include IP with disclaimer that it will be anonymized
-        ip:
-          request.headers.get("x-forwarded-for") ||
-          request.headers.get("x-real-ip") ||
-          "",
-      }),
+    await posthog.capture({
+      event: eventType,
+      distinctId: authToken || "anonymous",
+      properties: {
+        ...eventData,
+        userAgent,
+        referer,
+        ip,
+      },
     });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      return NextResponse.json(
-        { error: errorData.message || "Failed to track analytics event" },
-        { status: response.status }
-      );
-    }
 
     return NextResponse.json({ success: true });
   } catch (err) {
@@ -98,7 +83,7 @@ export async function GET(request: NextRequest) {
 
     // Forward the request to the backend API
     const response = await fetch(
-      `${API_BASE_URL}/analytics/data?${queryParams.toString()}`,
+      `${process.env.API_BASE_URL}/analytics/data?${queryParams.toString()}`,
       {
         headers: {
           Authorization: `Bearer ${authToken}`,

@@ -1,51 +1,25 @@
-import { useEffect, useRef, RefObject } from "react";
+import { useEffect, RefObject } from 'react';
 
-/**
- * Custom hook for detecting clicks outside of specified elements
- * SSR-safe and follows React best practices
- */
 export function useClickOutside<T extends HTMLElement = HTMLElement>(
-  handler: () => void,
-  enabled: boolean = true,
-  excludeRefs: RefObject<HTMLElement>[] = []
-): RefObject<T> {
-  const ref = useRef<T>(null);
-
+  ref: RefObject<T>,
+  handler: (event: Event) => void
+) {
   useEffect(() => {
-    // Only run on client side
-    if (typeof window === "undefined" || !enabled) {
-      return;
-    }
-
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-
-      // Check if click is inside the main ref
-      if (ref.current && ref.current.contains(target)) {
+    const listener = (event: Event) => {
+      const el = ref?.current;
+      if (!el || el.contains((event?.target as Node) || null)) {
         return;
       }
 
-      // Check if click is inside any excluded refs
-      const isInsideExcludedElement = excludeRefs.some(
-        (excludeRef) =>
-          excludeRef.current && excludeRef.current.contains(target)
-      );
-
-      if (!isInsideExcludedElement) {
-        handler();
-      }
+      handler(event);
     };
 
-    // Use a small delay to avoid immediate triggering
-    const timeoutId = setTimeout(() => {
-      document.addEventListener("mousedown", handleClickOutside);
-    }, 0);
+    document.addEventListener('mousedown', listener);
+    document.addEventListener('touchstart', listener);
 
     return () => {
-      clearTimeout(timeoutId);
-      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener('mousedown', listener);
+      document.removeEventListener('touchstart', listener);
     };
-  }, [handler, enabled, excludeRefs]);
-
-  return ref;
+  }, [ref, handler]);
 }

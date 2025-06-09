@@ -2,25 +2,30 @@ import { Router } from "express";
 
 import {
   handleRegisterAgent,
-  handleGetAgent,
-  handleUpdateAgent,
   handleUpdateAgentState,
-  handleListAgents,
   handleGetAgentsByCapability,
 } from "../endpoints";
 
 import {
   RegisterAgentRequestSchema,
-  UpdateAgentRequestSchema,
-  GetAgentRequestSchema,
   UpdateAgentStateRequestSchema,
-  GetAgentsRequestSchema,
   GetAgentsByCapabilityRequestSchema,
 } from "../schemas";
 
 import { agentEndpoint, specialAccessEndpoint } from "../middleware";
 
 const router = Router();
+
+/**
+ * MIGRATED: Removed CRUD routes
+ * 
+ * DELETED ROUTES - Use auto-CRUD instead:
+ * - GET /agents/:agentId → GET /api/model/agent/:id
+ * - GET /agents → GET /api/model/agent
+ * - PATCH /agents/:agentId → PATCH /api/model/agent/:id
+ * 
+ * KEPT: Business logic routes only
+ */
 
 /**
  * Phase 1: Admin-only agent registration
@@ -34,30 +39,22 @@ router.post(
 );
 
 /**
- * Public read access to agent directory
- * - Basic info available to all
- * - Detailed info available to authenticated users
+ * Agent state management - complex business logic
+ * Only the agent itself can update its state
  */
-router.get("/agents/:agentId", agentEndpoint(GetAgentRequestSchema), handleGetAgent);
-
-router.get("/agents", agentEndpoint(GetAgentsRequestSchema), handleListAgents);
-
-router.get(
-  "/agents/capability/:capability",
-  agentEndpoint(GetAgentsByCapabilityRequestSchema),
-  handleGetAgentsByCapability,
-);
-
-/**
- * Agent self-management endpoints
- * Only the agent itself can update its state/info
- */
-router.patch("/agents/:agentId", agentEndpoint(UpdateAgentRequestSchema), handleUpdateAgent);
-
 router.patch(
   "/agents/:agentId/state",
   agentEndpoint(UpdateAgentStateRequestSchema),
   handleUpdateAgentState,
+);
+
+/**
+ * Complex capability-based search
+ */
+router.get(
+  "/agents/by-capability/:capability",
+  agentEndpoint(GetAgentsByCapabilityRequestSchema),
+  handleGetAgentsByCapability,
 );
 
 export default router;

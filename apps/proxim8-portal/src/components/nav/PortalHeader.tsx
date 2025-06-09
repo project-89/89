@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useWalletAuthStore } from "@/stores/walletAuthStore";
 import { useLoreCount } from "@/hooks/useLoreCount";
 import { useNftStore } from "@/stores/nftStore";
+import { useAnalytics } from "@/hooks/useAnalytics";
 import dynamic from "next/dynamic";
 
 const UnifiedWalletButton = dynamic(
@@ -18,39 +19,23 @@ const UnifiedWalletButton = dynamic(
 export function PortalHeader() {
   const router = useRouter();
   const pathname = usePathname();
+  const { track } = useAnalytics();
   const [isLoaded, setIsLoaded] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showLoreDropdown, setShowLoreDropdown] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
   const mobileButtonRef = useRef<HTMLButtonElement>(null);
-  
+
+  // Get authentication state directly from store
+  const isAuthenticated = useWalletAuthStore((state) => state.isAuthenticated);
+
   // Get unclaimed lore count and NFT store
   const { unclaimedCount } = useLoreCount();
   const userNfts = useNftStore((state) => state.userNfts);
   const hasProxim8s = userNfts && userNfts.length > 0;
-  
-  // Use wallet auth in useEffect to avoid SSR issues
-  useEffect(() => {
-    const checkAuth = () => {
-      try {
-        const store = useWalletAuthStore.getState();
-        setIsAuthenticated(store.isAuthenticated);
-      } catch (error) {
-        console.error("Error checking auth:", error);
-        setIsAuthenticated(false);
-      }
-    };
-    
-    checkAuth();
-    
-    // Subscribe to auth changes
-    const unsubscribe = useWalletAuthStore.subscribe(
-      (state) => setIsAuthenticated(state.isAuthenticated)
-    );
-    
-    return () => unsubscribe();
-  }, []);
+
+  // No need for a separate useEffect since we're already accessing isAuthenticated
+  // directly from the store via the selector: state => state.isAuthenticated
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoaded(true), 100);
@@ -61,11 +46,13 @@ export function PortalHeader() {
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Node;
-      const isOutsideMenu = mobileMenuRef.current && !mobileMenuRef.current.contains(target);
-      const isOutsideButton = mobileButtonRef.current && !mobileButtonRef.current.contains(target);
-      
+      const isOutsideMenu =
+        mobileMenuRef.current && !mobileMenuRef.current.contains(target);
+      const isOutsideButton =
+        mobileButtonRef.current && !mobileButtonRef.current.contains(target);
+
       if (isOutsideMenu && isOutsideButton) {
-        console.log('Clicking outside mobile menu, closing');
+        console.log("Clicking outside mobile menu, closing");
         setShowMobileMenu(false);
       }
     }
@@ -73,12 +60,12 @@ export function PortalHeader() {
     if (showMobileMenu) {
       // Add a small delay to prevent immediate closing when opening
       const timer = setTimeout(() => {
-        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener("mousedown", handleClickOutside);
       }, 100);
-      
+
       return () => {
         clearTimeout(timer);
-        document.removeEventListener('mousedown', handleClickOutside);
+        document.removeEventListener("mousedown", handleClickOutside);
       };
     }
   }, [showMobileMenu]);
@@ -88,15 +75,14 @@ export function PortalHeader() {
     { path: "/my-proxim8s", label: "AGENTS" },
     { path: "/lore", label: "LORE" },
     { path: "/missions", label: "MISSIONS" },
+    { path: "/training", label: "TRAINING" },
   ];
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 p-4 md:p-6">
       <div
         className={`bg-gray-900/60 backdrop-blur-sm border border-gray-700/50 rounded-full px-6 py-3 flex items-center justify-between w-[95%] mx-auto transition-all duration-800 ease-out ${
-          isLoaded
-            ? "translate-y-0 opacity-100"
-            : "-translate-y-full opacity-0"
+          isLoaded ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0"
         }`}
       >
         <div className="flex items-center space-x-6">
@@ -109,7 +95,13 @@ export function PortalHeader() {
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  console.log('Mobile menu button clicked, current state:', showMobileMenu);
+                  track("mobile_menu_toggled", {
+                    action: showMobileMenu ? "close" : "open",
+                  });
+                  console.log(
+                    "Mobile menu button clicked, current state:",
+                    showMobileMenu
+                  );
                   setShowMobileMenu(!showMobileMenu);
                 }}
                 className="p-2 text-gray-400 hover:text-gray-200 transition-colors"
@@ -138,11 +130,14 @@ export function PortalHeader() {
                 </svg>
               </button>
             )}
-            
+
             {/* Logo */}
             <div
               className="font-orbitron font-bold text-primary-500 relative cursor-pointer"
-              onClick={() => router.push("/")}
+              onClick={() => {
+                track("logo_clicked", { location: "mobile_header" });
+                router.push("/");
+              }}
             >
               PROJECT 89
               <span className="absolute -inset-1 opacity-30 blur-sm animate-pulse text-primary-500">
@@ -154,7 +149,10 @@ export function PortalHeader() {
           {/* Logo - Desktop */}
           <div
             className="hidden md:block font-orbitron font-bold text-primary-500 relative cursor-pointer"
-            onClick={() => router.push("/")}
+            onClick={() => {
+              track("logo_clicked", { location: "desktop_header" });
+              router.push("/");
+            }}
           >
             PROJECT 89
             <span className="absolute -inset-1 opacity-30 blur-sm animate-pulse text-primary-500">
@@ -168,7 +166,14 @@ export function PortalHeader() {
               {navItems.map((item) => (
                 <button
                   key={item.path}
-                  onClick={() => router.push(item.path)}
+                  onClick={() => {
+                    track("nav_item_clicked", {
+                      item_label: item.label,
+                      item_path: item.path,
+                      location: "desktop_nav",
+                    });
+                    router.push(item.path);
+                  }}
                   className={`font-space-mono text-xs transition-colors ${
                     pathname === item.path
                       ? "text-primary-500"
@@ -184,29 +189,82 @@ export function PortalHeader() {
           {/* Status indicator */}
           <div className="hidden lg:flex items-center text-xs text-gray-400 font-space-mono">
             <span className="text-red-400 animate-pulse mr-1">▲</span>
-            REALITY_STATUS: <span className="text-red-400 ml-1">COMPROMISED</span>
+            REALITY_STATUS:{" "}
+            <span className="text-red-400 ml-1">COMPROMISED</span>
           </div>
         </div>
 
         <div className="flex items-center gap-4">
+          {/* Purchase CTA - Always visible on desktop */}
+          <a
+            href="https://launchmynft.io/sol/16033"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => {
+              track("buy_proxim8_clicked", {
+                location: "header_cta_desktop",
+                has_proxim8s: hasProxim8s,
+                is_authenticated: isAuthenticated,
+              });
+            }}
+            className="hidden md:flex items-center gap-2 font-space-mono text-xs px-4 py-2 bg-transparent border border-gray-600 text-gray-400 rounded-full hover:border-gray-500 hover:text-gray-300 transition-all"
+          >
+            <span>BUY PROXIM8 NFT</span>
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M13 7l5 5m0 0l-5 5m5-5H6"
+              />
+            </svg>
+          </a>
+
           {/* Purchase CTA if no NFTs */}
           {isAuthenticated && !hasProxim8s && (
             <button
-              onClick={() => window.open('https://launchmynft.io/sol/16033', '_blank')}
+              onClick={() => {
+                track("get_proxim8_agents_clicked", {
+                  location: "header_no_nfts",
+                  is_authenticated: true,
+                });
+                window.open("https://launchmynft.io/sol/16033", "_blank");
+              }}
               className="hidden md:flex items-center gap-2 font-space-mono text-xs px-4 py-2 bg-primary-500/80 text-white border border-primary-400/50 rounded hover:bg-primary-500 hover:border-primary-400 transition-all"
             >
               <span>GET PROXIM8 AGENTS</span>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M13 7l5 5m0 0l-5 5m5-5H6"
+                />
               </svg>
             </button>
           )}
-          
+
           {/* Lore Notification Icon - Clean version */}
           {isAuthenticated && hasProxim8s && unclaimedCount > 0 && (
             <div className="relative lore-dropdown-container">
               <button
-                onClick={() => setShowLoreDropdown(!showLoreDropdown)}
+                onClick={() => {
+                  track("lore_bell_clicked", {
+                    unclaimed_count: unclaimedCount,
+                    action: showLoreDropdown ? "close" : "open",
+                  });
+                  setShowLoreDropdown(!showLoreDropdown);
+                }}
                 className="relative p-2 text-gray-400 hover:text-gray-200 transition-colors"
               >
                 <svg
@@ -226,7 +284,7 @@ export function PortalHeader() {
                   {unclaimedCount > 9 ? "9+" : unclaimedCount}
                 </span>
               </button>
-              
+
               {/* Clean Dropdown */}
               {showLoreDropdown && (
                 <div className="absolute right-0 mt-2 w-64 bg-gray-900 border border-gray-700 rounded-lg shadow-lg overflow-hidden">
@@ -237,10 +295,16 @@ export function PortalHeader() {
                   </div>
                   <div className="p-4">
                     <p className="font-space-mono text-xs text-gray-300 mb-3">
-                      {unclaimedCount} memory {unclaimedCount === 1 ? 'fragment' : 'fragments'} recovered from the quantum substrate.
+                      {unclaimedCount} memory{" "}
+                      {unclaimedCount === 1 ? "fragment" : "fragments"}{" "}
+                      recovered from the quantum substrate.
                     </p>
                     <button
                       onClick={() => {
+                        track("claim_lore_clicked", {
+                          unclaimed_count: unclaimedCount,
+                          location: "lore_dropdown",
+                        });
                         setShowLoreDropdown(false);
                         router.push("/lore");
                       }}
@@ -253,7 +317,7 @@ export function PortalHeader() {
               )}
             </div>
           )}
-          
+
           {/* Wallet button */}
           <div className="wallet-button-wrapper relative z-50">
             <UnifiedWalletButton />
@@ -263,13 +327,21 @@ export function PortalHeader() {
 
       {/* Mobile Navigation Menu */}
       {isAuthenticated && showMobileMenu && (
-        <div ref={mobileMenuRef} className="md:hidden fixed top-20 left-0 right-0 z-40 mx-4">
+        <div
+          ref={mobileMenuRef}
+          className="md:hidden fixed top-20 left-0 right-0 z-40 mx-4"
+        >
           <div className="bg-gray-900/95 backdrop-blur-sm border border-gray-700/50 rounded-lg overflow-hidden">
             <nav className="py-2">
               {navItems.map((item, index) => (
                 <button
                   key={item.path}
                   onClick={() => {
+                    track("nav_item_clicked", {
+                      item_label: item.label,
+                      item_path: item.path,
+                      location: "mobile_nav",
+                    });
                     router.push(item.path);
                     setShowMobileMenu(false);
                   }}
@@ -287,6 +359,37 @@ export function PortalHeader() {
                   )}
                 </button>
               ))}
+
+              {/* Buy Proxim8 NFT - Mobile only */}
+              <a
+                href="https://launchmynft.io/sol/16033"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => {
+                  track("buy_proxim8_clicked", {
+                    location: "mobile_menu",
+                    has_proxim8s: hasProxim8s,
+                    is_authenticated: isAuthenticated,
+                  });
+                  setShowMobileMenu(false);
+                }}
+                className="w-full px-6 py-3 text-left font-space-mono text-sm transition-colors flex items-center justify-between text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 border-t border-gray-700/50"
+              >
+                <span>BUY PROXIM8 NFT</span>
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                  />
+                </svg>
+              </a>
             </nav>
           </div>
         </div>

@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletAuth } from "@/stores/walletAuthStore";
 import { useSearchParams } from "next/navigation";
 import { getNFTsByWallet, getNFT } from "@/services/nft";
@@ -16,7 +15,6 @@ import { NFTMetadata } from "@/types/nft";
 interface Props {}
 
 export default function PipelineClient({}: Props) {
-  const { publicKey } = useWallet();
   const {
     walletAddress: authWalletAddress,
     connected: authConnected,

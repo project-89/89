@@ -1,0 +1,16 @@
+{
+  "schema": "./schema.zmodel",
+  "prisma": {
+    "schema": "./prisma/schema.prisma"
+  },
+  "output": {
+    "client": "./node_modules/.zenstack",
+    "hooks": {
+      "react-query": {
+        "output": "./src/lib/hooks",
+        "target": "react",
+        "version": "v5"
+      }
+    }
+  }
+}

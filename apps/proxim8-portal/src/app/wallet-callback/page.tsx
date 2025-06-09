@@ -7,20 +7,48 @@ import {
   handlePhantomSignCallback,
   storeCallbackSuccess,
 } from "@/utils/mobileDetection";
+import { PortalHeader } from "@/components/nav/PortalHeader";
 
 export const dynamic = "force-dynamic";
 
 function LoadingFallback() {
+  const [backgroundNumber] = useState(() => Math.floor(Math.random() * 19) + 1);
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-gray-50">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-      <p className="text-gray-700 text-lg">Loading wallet callback...</p>
+    <div className="min-h-screen bg-black text-gray-200 relative overflow-hidden flex flex-col pt-24">
+      <PortalHeader />
+      
+      {/* Background Image */}
+      <div
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-30"
+        style={{
+          backgroundImage: `url('/background-${backgroundNumber}.png')`,
+        }}
+      />
+
+      {/* Vignette Overlay */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(ellipse at center, transparent 0%, transparent 40%, rgba(0,0,0,0.6) 100%)",
+        }}
+      />
+      
+      <div className="relative z-10 flex-1 flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500 mx-auto mb-4"></div>
+          <p className="font-space-mono text-sm text-gray-400">INITIALIZING QUANTUM BRIDGE...</p>
+        </div>
+      </div>
     </div>
   );
 }
 
 function WalletCallbackHandler() {
   const searchParams = useSearchParams();
+  const [backgroundNumber] = useState(() => Math.floor(Math.random() * 19) + 1);
+  const [isLoaded, setIsLoaded] = useState(false);
   const [status, setStatus] = useState<{
     loading: boolean;
     success?: boolean;
@@ -28,6 +56,11 @@ function WalletCallbackHandler() {
     type?: "connect" | "sign";
     autoCloseAttempted?: boolean;
   }>({ loading: true });
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoaded(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const processCallback = async () => {
@@ -165,96 +198,179 @@ function WalletCallbackHandler() {
   useEffect(() => {
     if (!status.loading && !status.autoCloseAttempted) {
       setStatus((prev) => ({ ...prev, autoCloseAttempted: true }));
-      setTimeout(() => {
-        try {
-          window.close();
-        } catch (e) {
-          console.warn("[WalletCallbackPage] Failed to auto-close tab:", e);
-          // If window.close() fails, the user will see the status message and the manual button (if applicable).
-        }
-      }, 2000); // Attempt to close after 2 seconds
+      // setTimeout(() => {
+      try {
+        window.close();
+      } catch (e) {
+        console.warn("[WalletCallbackPage] Failed to auto-close tab:", e);
+        // If window.close() fails, the user will see the status message and the manual button (if applicable).
+      }
+      // }, 0); // Attempt to close after 2 seconds
     }
   }, [status.loading, status.autoCloseAttempted]);
 
   if (status.loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <p className="text-gray-700 text-lg">Processing wallet response...</p>
+      <div className="min-h-screen bg-black text-gray-200 relative overflow-hidden flex flex-col pt-24">
+        <PortalHeader />
+        
+        {/* Background Image */}
+        <div
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000 ease-out"
+          style={{
+            backgroundImage: `url('/background-${backgroundNumber}.png')`,
+            opacity: isLoaded ? 1 : 0.3,
+          }}
+        />
+
+        {/* Vignette Overlay */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              "radial-gradient(ellipse at center, transparent 0%, transparent 40%, rgba(0,0,0,0.6) 100%)",
+          }}
+        />
+        
+        <div className="relative z-10 flex-1 flex items-center justify-center p-4">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500 mx-auto mb-4"></div>
+            <p className="font-space-mono text-sm text-gray-400">PROCESSING QUANTUM AUTHENTICATION...</p>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-gray-50 text-center">
-      <div className="bg-white shadow-lg rounded-lg p-8 max-w-md w-full">
-        <div
-          className={`w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center ${status.success ? "bg-green-100" : "bg-red-100"}`}
-        >
-          {status.success ? (
-            <svg
-              className="w-8 h-8 text-green-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
-          ) : (
-            <svg
-              className="w-8 h-8 text-red-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          )}
-        </div>
+    <div className="min-h-screen bg-black text-gray-200 relative overflow-hidden flex flex-col pt-24">
+      <PortalHeader />
+      
+      {/* Background Image */}
+      <div
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000 ease-out"
+        style={{
+          backgroundImage: `url('/background-${backgroundNumber}.png')`,
+          opacity: isLoaded ? 1 : 0.3,
+        }}
+      />
 
-        <h1
-          className={`text-2xl font-semibold mb-3 ${status.success ? "text-gray-800" : "text-red-700"}`}
-        >
-          {status.success
-            ? status.type === "connect"
-              ? "Connected!"
-              : "Signature Submitted!"
-            : "Error"}
-        </h1>
-
-        <p className="text-gray-600 mb-8 text-base">{status.message}</p>
-
-        {status.success && (
-          <p className="text-sm text-gray-500">
-            This window will attempt to close automatically.
-          </p>
-        )}
-
-        {!status.success && (
-          <button
-            onClick={() => {
-              try {
-                window.close();
-              } catch (e) {
-                alert("Please manually close this tab and return to the app.");
-              }
-            }}
-            className="mt-4 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors text-base font-medium"
+      {/* Vignette Overlay */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(ellipse at center, transparent 0%, transparent 40%, rgba(0,0,0,0.6) 100%)",
+        }}
+      />
+      
+      {/* Main Content Area */}
+      <main className="relative z-10 flex-1 flex flex-col justify-center px-4 py-8">
+        <div className="w-full max-w-md mx-auto">
+          <div
+            className={`bg-gray-900/60 backdrop-blur-sm border border-gray-700/50 rounded-lg p-8 hover:border-primary-500/30 transition-all duration-1000 ease-out ${
+              isLoaded ? "translate-y-0 opacity-100" : "translate-y-8 opacity-0"
+            }`}
           >
-            Close Tab
-          </button>
-        )}
-      </div>
+          {/* Status Icon */}
+          <div
+            className={`w-16 h-16 mx-auto mb-6 rounded-full flex items-center justify-center border-2 ${
+              status.success 
+                ? "border-primary-500 bg-primary-500/10" 
+                : "border-red-400 bg-red-400/10"
+            }`}
+          >
+            {status.success ? (
+              <svg
+                className="w-8 h-8 text-primary-500"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+            ) : (
+              <svg
+                className="w-8 h-8 text-red-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            )}
+          </div>
+
+          {/* Title */}
+          <h1
+            className={`font-orbitron text-2xl font-bold mb-4 ${
+              status.success ? "text-primary-500" : "text-red-400"
+            }`}
+          >
+            {status.success
+              ? status.type === "connect"
+                ? "QUANTUM BRIDGE ESTABLISHED"
+                : "AUTHENTICATION CONFIRMED"
+              : "CONNECTION FAILURE"}
+          </h1>
+
+          {/* Message */}
+          <p className="font-space-mono text-sm text-gray-300 mb-6 leading-relaxed">
+            {status.success 
+              ? status.type === "connect"
+                ? "Your consciousness has been linked to the resistance network. Welcome, Agent."
+                : "Your identity signature has been verified by the quantum substrate."
+              : "Unable to establish secure connection to the resistance network."
+            }
+          </p>
+
+          {/* Technical details */}
+          <div className="border-t border-gray-700 pt-4 mb-6">
+            <p className="font-space-mono text-xs text-gray-400 mb-2">
+              STATUS: <span className={status.success ? "text-primary-500" : "text-red-400"}>
+                {status.success ? "AUTHENTICATED" : "ERROR"}
+              </span>
+            </p>
+            <p className="font-space-mono text-xs text-gray-500">
+              {status.message}
+            </p>
+          </div>
+
+          {/* Auto-close notification */}
+          {status.success && (
+            <p className="font-space-mono text-xs text-gray-500 mb-4">
+              Returning to command center...
+            </p>
+          )}
+
+          {/* Manual close button for errors */}
+          {!status.success && (
+            <button
+              onClick={() => {
+                try {
+                  window.close();
+                } catch (e) {
+                  alert("Please manually close this tab and return to the command center.");
+                }
+              }}
+              className="font-space-mono px-6 py-3 bg-red-400/20 border border-red-400 rounded hover:bg-red-400/30 transition-all text-red-400 text-sm"
+            >
+              CLOSE BRIDGE
+            </button>
+          )}
+          </div>
+        </div>
+      </main>
     </div>
   );
 }

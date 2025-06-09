@@ -13,6 +13,7 @@ export interface Lore {
   claimed?: boolean;
   claimedBy?: string;
   claimedAt?: string;
+  type?: "text" | "image" | "audio" | "video";
   traits?: Record<string, string>;
   metadata?: Record<string, any>;
 }

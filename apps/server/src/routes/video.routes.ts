@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import {
-  handleDeleteVideo,
   handleGenerateVideo,
   handleGetUserVideos,
   handleGetVideoStatus,
@@ -12,7 +11,6 @@ import {
   proxim8PublicEndpoint,
 } from '../middleware/proxim8Chains.middleware';
 import {
-  DeleteVideoRequestSchema,
   GenerateVideoRequestSchema,
   GetUserVideosRequestSchema,
   GetVideoStatusRequestSchema,
@@ -21,6 +19,15 @@ import {
 } from '../schemas';
 
 const router = Router();
+
+/**
+ * MIGRATED: Removed CRUD routes
+ * 
+ * DELETED ROUTES - Use auto-CRUD instead:
+ * - DELETE /videos/:id → DELETE /api/model/videoGeneration/:id
+ * 
+ * KEPT: Business logic routes only
+ */
 
 /**
  * Generate a new video for an NFT
@@ -60,16 +67,6 @@ router.post(
   '/videos/:videoId/publish',
   ...proxim8AuthenticatedEndpoint(PublishVideoRequestSchema),
   handlePublishVideo
-);
-
-/**
- * Delete video generation
- * Requires authentication and ownership verification
- */
-router.delete(
-  '/videos/:videoId',
-  ...proxim8AuthenticatedEndpoint(DeleteVideoRequestSchema),
-  handleDeleteVideo
 );
 
 /**
