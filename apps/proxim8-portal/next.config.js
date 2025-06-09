@@ -9,9 +9,6 @@ const nextConfig = {
   poweredByHeader: false,
   generateEtags: true,
 
-  // Enable SWC minifier for faster builds
-  swcMinify: true,
-
   images: {
     domains: [
       "na-assets.pinit.io",
