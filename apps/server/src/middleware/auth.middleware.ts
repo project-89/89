@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { ERROR_MESSAGES } from '../constants';
-import '../types/express'; // Load Request interface extension first
+// Express types are loaded globally
 import { ApiError } from '../utils';
 
 interface JWTPayload {

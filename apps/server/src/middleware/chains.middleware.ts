@@ -3,7 +3,6 @@ import { ZodSchema } from "zod";
 import {
   verifyFingerprintExists,
   validateRequest,
-  verifyAccountOwnership,
   validateAuthToken,
   withMetrics,
   verifyAgent,
@@ -29,14 +28,11 @@ export const fingerprintWriteEndpoint = (schema?: ZodSchema) => {
   return chain;
 };
 
+// DEPRECATED: Use authenticatedEndpoint instead - ZenStack handles authorization
 // For endpoints that need auth + ownership verification (protected operations)
 export const protectedEndpoint = (schema?: ZodSchema) => {
-  const chain: RequestHandler[] = [
-    withMetrics(validateAuthToken, "authValidation"),
-    withMetrics(verifyAccountOwnership, "ownershipVerification"),
-  ];
-  if (schema) chain.push(withMetrics(validateRequest(schema), "schemaValidation"));
-  return chain;
+  // Now just delegates to authenticatedEndpoint since ZenStack handles authorization
+  return authenticatedEndpoint(schema);
 };
 
 // For endpoints that need authentication but ZenStack handles authorization
@@ -60,7 +56,7 @@ export const agentEndpoint = (schema?: ZodSchema) => {
 export const specialAccessEndpoint = (schema?: ZodSchema) => {
   const chain: RequestHandler[] = [
     withMetrics(validateAuthToken, "authValidation"),
-    withMetrics(verifyAccountOwnership, "ownershipVerification"),
+    // No ownership verification - ZenStack handles it
     withMetrics(requireRole(ACCOUNT_ROLE.agent_creator), "roleVerification"),
   ];
   if (schema) chain.push(withMetrics(validateRequest(schema), "schemaValidation"));

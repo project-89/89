@@ -31,7 +31,8 @@
     "eslint-config-prettier": "10.1.5",
     "prettier": "3.5.3",
     "prettier-plugin-organize-imports": "4.1.0",
-    "turbo": "^2.5.3"
+    "turbo": "^2.5.3",
+    "zenstack": "^2.15.1"
   },
   "dependencies": {
     "dotenv": "^16.5.0"

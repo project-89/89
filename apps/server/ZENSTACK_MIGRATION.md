@@ -1,145 +1,218 @@
-# ZenStack Migration Strategy
+# ZenStack Migration Guide
 
 ## Overview
-We're adopting a hybrid approach where authentication middleware stays, but authorization moves to ZenStack.
 
-## What Changes
+We've successfully integrated ZenStack into the server, which provides automatic CRUD endpoints with built-in access control. This guide explains how to use the new endpoints.
 
-### 1. Keep These Middlewares:
-- `verifyFingerprintExists` - Establishes fingerprint context
-- `validateAuthToken` - Validates JWT tokens
-- `validateRequest` - Schema validation
-- `withMetrics` - Performance monitoring
-- `verifyAgent` - Establishes agent context
+## What Changed
 
-### 2. Remove/Replace These:
-- `verifyAccountOwnership` - Replace with ZenStack ownership policies
-- `requireRole` - Replace with ZenStack role-based policies
-- Manual permission checks in endpoints
+1. **Auto-CRUD Endpoints**: All models now have automatic REST endpoints at `/api/model/{modelName}`
+2. **Access Control**: Authorization is handled automatically based on the schema policies
+3. **Removed Manual Ownership Checks**: The `protectedEndpoint()` middleware now delegates to `authenticatedEndpoint()`
 
-### 3. Middleware Chains Update:
+## API Endpoints
 
-```typescript
-// Before
-export const protectedEndpoint = (schema?: ZodSchema) => {
-  const chain: RequestHandler[] = [
-    withMetrics(validateAuthToken, "authValidation"),
-    withMetrics(verifyAccountOwnership, "ownershipVerification"), // Remove this
-  ];
-  if (schema) chain.push(withMetrics(validateRequest(schema), "schemaValidation"));
-  return chain;
-};
-
-// After
-export const authenticatedEndpoint = (schema?: ZodSchema) => {
-  const chain: RequestHandler[] = [
-    withMetrics(validateAuthToken, "authValidation"),
-    // No ownership verification - ZenStack handles it
-  ];
-  if (schema) chain.push(withMetrics(validateRequest(schema), "schemaValidation"));
-  return chain;
-};
+### Base URL Pattern
+```
+/api/model/{modelName}
 ```
 
-## Migration Steps
+Where `{modelName}` is the lowercase model name (e.g., `account`, `profile`, `video`, etc.)
 
-### Phase 1: Setup (Complete)
-- [x] Install ZenStack
-- [x] Create schema.zmodel with policies
-- [x] Create enhanced Prisma client
-- [x] Create example routes
+### Standard Operations
 
-### Phase 2: Parallel Implementation
-1. Keep existing routes working
-2. Create new ZenStack versions alongside
-3. Test thoroughly
-4. Switch frontend to new endpoints
-5. Remove old endpoints
+#### 1. List/Find Many
+```
+GET /api/model/{modelName}
+Query params:
+  - where: JSON filter object
+  - include: Relations to include
+  - orderBy: Sort order
+  - skip: Pagination offset
+  - take: Pagination limit
+```
 
-### Phase 3: Endpoint Migration
+#### 2. Find One
+```
+GET /api/model/{modelName}/{id}
+Query params:
+  - include: Relations to include
+```
 
-#### Mission Routes
+#### 3. Create
+```
+POST /api/model/{modelName}
+Body: JSON object with model fields
+```
+
+#### 4. Update
+```
+PATCH /api/model/{modelName}/{id}
+Body: JSON object with fields to update
+```
+
+#### 5. Delete
+```
+DELETE /api/model/{modelName}/{id}
+```
+
+## Examples
+
+### Before (Manual Endpoints)
 ```typescript
-// Old: apps/server/src/routes/mission.routes.ts
-router.get("/missions/available", ...fingerprintWriteEndpoint(), handleGetAvailableMissions);
+// Get user's videos
+GET /api/videos/user
+Authorization: Bearer <token>
 
-// New: Use ZenStack
-router.get("/v2/missions/available", ...fingerprintWriteEndpoint(), async (req, res) => {
-  const db = getEnhancedPrisma(req);
-  const missions = await db.mission.findMany({
-    where: { status: 'available' }
+// Update video
+PATCH /api/videos/:id
+Authorization: Bearer <token>
+Body: { title: "New Title" }
+```
+
+### After (ZenStack Auto-CRUD)
+```typescript
+// Get user's videos (filtered automatically by ownership)
+GET /api/model/video
+Authorization: Bearer <token>
+
+// Update video (ownership checked automatically)
+PATCH /api/model/video/{id}
+Authorization: Bearer <token>
+Body: { title: "New Title" }
+```
+
+## Frontend Code Migration
+
+### Before
+```typescript
+// services/video.ts
+export async function getUserVideos() {
+  const response = await fetch('/api/videos/user', {
+    headers: { Authorization: `Bearer ${token}` }
   });
-  return sendSuccess(res, missions);
-});
+  return response.json();
+}
+
+export async function updateVideo(id: string, data: any) {
+  const response = await fetch(`/api/videos/${id}`, {
+    method: 'PATCH',
+    headers: { 
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data)
+  });
+  return response.json();
+}
 ```
 
-#### Agent Routes
+### After
 ```typescript
-// Old: Manual ownership check
-router.patch("/agents/:id", ...protectedEndpoint(), async (req, res) => {
-  // Manual check if user owns agent
-  if (agent.accountId !== req.auth.accountId) {
-    return sendError(res, new ApiError(403, "Forbidden"));
+// services/video.ts
+export async function getUserVideos() {
+  // ZenStack automatically filters by ownership
+  const response = await fetch('/api/model/video', {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return response.json();
+}
+
+export async function updateVideo(id: string, data: any) {
+  const response = await fetch(`/api/model/video/${id}`, {
+    method: 'PATCH',
+    headers: { 
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data)
+  });
+  return response.json();
+}
+```
+
+## Advanced Queries
+
+### Filtering
+```typescript
+// Get completed videos
+GET /api/model/video?where={"status":"COMPLETED"}
+
+// Get videos with specific NFT
+GET /api/model/video?where={"nftId":"123"}
+```
+
+### Including Relations
+```typescript
+// Get profile with social profiles
+GET /api/model/profile/{id}?include={"socialProfiles":true}
+
+// Get agent with knowledge and missions
+GET /api/model/agent/{id}?include={"knowledge":true,"missions":true}
+```
+
+### Sorting and Pagination
+```typescript
+// Get latest 10 videos
+GET /api/model/video?orderBy={"createdAt":"desc"}&take=10
+
+// Get page 2 of notifications (20 per page)
+GET /api/model/notification?skip=20&take=20&orderBy={"createdAt":"desc"}
+```
+
+## Access Control
+
+ZenStack automatically enforces access control based on the schema policies:
+
+1. **Public Models**: Some models like `PublicVideo` and `NFT` are readable by anyone
+2. **Owner-Only**: Models like `Video`, `Profile` are only accessible by their owners
+3. **Admin Override**: Admins can access all resources
+4. **Relationship-Based**: Access through relationships (e.g., accessing knowledge through agent ownership)
+
+## Error Handling
+
+ZenStack returns standard HTTP status codes:
+
+- `200 OK` - Success
+- `201 Created` - Resource created
+- `400 Bad Request` - Invalid request
+- `403 Forbidden` - Access denied by policy
+- `404 Not Found` - Resource not found
+- `500 Internal Server Error` - Server error
+
+Example error response:
+```json
+{
+  "error": {
+    "message": "Access denied by policy",
+    "code": "FORBIDDEN"
   }
-  // Update logic
-});
-
-// New: ZenStack handles ownership
-router.patch("/v2/agents/:id", ...authenticatedEndpoint(), async (req, res) => {
-  const db = getEnhancedPrisma(req);
-  // This will fail if user doesn't own the agent
-  const agent = await db.agent.update({
-    where: { id: req.params.id },
-    data: req.body
-  });
-  return sendSuccess(res, agent);
-});
+}
 ```
+
+## Custom Business Logic Endpoints
+
+For operations that require custom business logic beyond CRUD, we still have dedicated endpoints:
+
+- `/api/videos/generate` - Generate video with AI
+- `/api/missions/deploy` - Deploy a mission
+- `/api/knowledge/compress` - Compress knowledge data
+- `/api/notifications/mark-all-read` - Bulk operations
+
+## Migration Checklist
+
+When migrating frontend code:
+
+1. [ ] Replace manual CRUD endpoints with `/api/model/{modelName}`
+2. [ ] Remove explicit ownership filters (ZenStack handles it)
+3. [ ] Update error handling for 403 Forbidden responses
+4. [ ] Test authorization edge cases
+5. [ ] Update API documentation
 
 ## Benefits
 
-1. **Cleaner Code**: Remove all manual authorization checks
-2. **Consistency**: Authorization rules in one place
-3. **Type Safety**: Policies are type-checked
-4. **Performance**: ZenStack optimizes queries with authorization
-5. **Maintainability**: Change policies without touching endpoints
-
-## Example Policy Translations
-
-### Current Middleware Logic → ZenStack Policy
-
-```typescript
-// Current: verifyAccountOwnership middleware
-if (resource.accountId !== req.auth.accountId) {
-  throw new ApiError(403, "Forbidden");
-}
-
-// ZenStack Policy:
-model Resource {
-  @@allow('all', accountId == auth().account?.id)
-}
-```
-
-```typescript
-// Current: requireRole('admin') middleware
-if (!req.auth.roles?.includes('admin')) {
-  throw new ApiError(403, "Admin access required");
-}
-
-// ZenStack Policy:
-@@allow('all', auth().roles.some(r => r == 'admin'))
-```
-
-## Testing Strategy
-
-1. **Unit Tests**: Test policies in isolation
-2. **Integration Tests**: Test full request flow
-3. **Policy Tests**: Verify access control scenarios
-4. **Migration Tests**: Ensure old and new endpoints return same data
-
-## Rollback Plan
-
-If issues arise:
-1. Frontend can switch back to old endpoints
-2. Keep both implementations until stable
-3. ZenStack can be disabled by using `basePrisma` instead of `getEnhancedPrisma`
+1. **Less Code**: No need for manual CRUD endpoints
+2. **Consistent API**: All models follow the same pattern
+3. **Automatic Authorization**: No manual ownership checks
+4. **Type Safety**: Generated from Prisma schema
+5. **Better Performance**: Optimized queries with access control

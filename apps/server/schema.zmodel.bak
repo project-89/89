@@ -1,9 +1,8 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// ZenStack schema - extends Prisma with access control policies
 
 generator client {
   provider = "prisma-client-js"
-  output   = "../src/generated/prisma"
+  output   = "./src/generated/prisma"
 }
 
 datasource db {
@@ -11,8 +10,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+plugin enhancer {
+  provider = '@core/enhancer'
+}
+
 // ====================================
-// CORE SERVER ENTITIES
+// CORE SERVER ENTITIES WITH POLICIES
 // ====================================
 
 model Account {
@@ -35,6 +38,9 @@ model Account {
   // Relations to Game entities
   gameAgent GameAgent?
 
+  // Access control
+  @@allow('read,update', auth().accountId == id || auth().isAdmin)
+  @@allow('create,delete', auth().isAdmin)
   @@map("accounts")
 }
 
@@ -45,8 +51,8 @@ model Profile {
   bio         String?
   avatar      String?
   isPublic    Boolean  @default(true)
-  socialLinks Json?
-  preferences Json?
+  socialLinks Json? // { twitter?: string, discord?: string, etc }
+  preferences Json? // User preferences object
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -56,6 +62,10 @@ model Profile {
   impressions    Impression[]
   socialProfiles SocialProfile[]
 
+  // Access control
+  @@allow('read', isPublic || accountId == auth().accountId || auth().isAdmin)
+  @@allow('create', auth().accountId != null)
+  @@allow('update,delete', accountId == auth().accountId || auth().isAdmin)
   @@map("profiles")
 }
 
@@ -63,7 +73,7 @@ model Fingerprint {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
   accountId   String?  @db.ObjectId
   fingerprint String   @unique
-  roles       String[]
+  roles       String[] // Array of role names
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -71,6 +81,11 @@ model Fingerprint {
   account Account? @relation(fields: [accountId], references: [id])
   visits  Visit[]
 
+  // Access control
+  @@allow('read', accountId == auth().accountId || auth().fingerprintId == id || auth().isAdmin)
+  @@allow('create', true) // Anyone can create fingerprint
+  @@allow('update', accountId == auth().accountId || auth().isAdmin)
+  @@allow('delete', auth().isAdmin)
   @@map("fingerprints")
 }
 
@@ -81,7 +96,7 @@ model Agent {
   description String?
   avatar      String?
   isActive    Boolean  @default(true)
-  config      Json?
+  config      Json? // Agent configuration
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -90,6 +105,11 @@ model Agent {
   knowledge Knowledge[]
   missions  Mission[]
 
+  // Access control
+  @@allow('read', id == auth().agentId || accountId == auth().accountId || auth().isAdmin)
+  @@allow('create', auth().accountId != null)
+  @@allow('update', accountId == auth().accountId || auth().isAdmin)
+  @@allow('delete', auth().isAdmin)
   @@map("agents")
 }
 
@@ -101,33 +121,40 @@ model Visit {
   userAgent     String?
   ipAddress     String?
   referrer      String?
-  duration      Int?
+  duration      Int? // Visit duration in milliseconds
   createdAt     DateTime @default(now())
 
   // Relations
   profile     Profile?    @relation(fields: [profileId], references: [id])
   fingerprint Fingerprint @relation(fields: [fingerprintId], references: [id])
 
+  // Access control - visits are write-only for users, readable by admins
+  @@allow('create', auth().fingerprintId != null)
+  @@allow('read,update,delete', auth().isAdmin)
   @@map("visits")
 }
 
 model Impression {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   profileId String   @db.ObjectId
-  type      String
-  context   Json?
+  type      String // Type of impression (view, click, etc)
+  context   Json? // Additional context data
   createdAt DateTime @default(now())
 
   // Relations
   profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
+  // Access control
+  @@allow('create', auth().fingerprintId != null)
+  @@allow('read', profileId == auth().accountId || auth().isAdmin)
+  @@allow('update,delete', auth().isAdmin)
   @@map("impressions")
 }
 
 model SocialProfile {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   profileId String   @db.ObjectId
-  platform  String
+  platform  String // twitter, discord, github, etc
   username  String
   url       String?
   verified  Boolean  @default(false)
@@ -137,6 +164,9 @@ model SocialProfile {
   // Relations
   profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
+  // Access control - same as profile
+  @@allow('read', profile.isPublic || profile.accountId == auth().accountId || auth().isAdmin)
+  @@allow('create,update,delete', profile.accountId == auth().accountId || auth().isAdmin)
   @@unique([profileId, platform])
   @@map("social_profiles")
 }
@@ -146,15 +176,17 @@ model Knowledge {
   agentId   String   @db.ObjectId
   title     String
   content   String
-  type      String
-  source    String?
-  metadata  Json?
+  type      String // document, url, text, etc
+  source    String? // Source of the knowledge
+  metadata  Json? // Additional metadata
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
   agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
+  // Access control - knowledge belongs to agent owner
+  @@allow('read,create,update,delete', agent.accountId == auth().accountId || auth().isAdmin)
   @@map("knowledge")
 }
 
@@ -167,18 +199,20 @@ model Mission {
   priority    Int           @default(1)
   dueDate     DateTime?
   completedAt DateTime?
-  result      Json?
+  result      Json? // Mission result data
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
   // Relations
   agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
+  // Access control - missions belong to agent owner
+  @@allow('read,create,update,delete', agent.accountId == auth().accountId || auth().isAdmin)
   @@map("missions")
 }
 
 // ====================================
-// PROXIM8 ENTITIES
+// PROXIM8 ENTITIES WITH POLICIES
 // ====================================
 
 model Proxim8User {
@@ -190,15 +224,19 @@ model Proxim8User {
   avatar      String?
   isPublic    Boolean  @default(true)
   isAdmin     Boolean  @default(false)
-  socialLinks Json?
-  preferences Json?
-  stats       Json?
+  socialLinks Json? // { twitter?: string, discord?: string, etc }
+  preferences Json? // User preferences
+  stats       Json? // User statistics
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   // Relations
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
+  // Access control
+  @@allow('read', isPublic || accountId == auth().accountId || auth().isAdmin)
+  @@allow('create', auth().accountId != null && accountId == auth().accountId)
+  @@allow('update,delete', accountId == auth().accountId || auth().isAdmin)
   @@map("proxim8_users")
 }
 
@@ -212,18 +250,22 @@ model Video {
   description  String?
   videoUrl     String?
   thumbnailUrl String?
-  duration     Int?
-  fileSize     Int?
-  resolution   String?
+  duration     Int? // Video duration in seconds
+  fileSize     Int? // File size in bytes
+  resolution   String? // Video resolution (e.g., "1920x1080")
   isPublic     Boolean     @default(false)
-  metadata     Json?
-  errorMessage String?
+  metadata     Json? // Additional metadata
+  errorMessage String? // Error message if failed
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
   // Relations
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
+  // Access control
+  @@allow('read', isPublic || accountId == auth().accountId || auth().isAdmin)
+  @@allow('create', auth().accountId != null)
+  @@allow('update,delete', accountId == auth().accountId || auth().isAdmin)
   @@map("videos")
 }
 
@@ -233,7 +275,7 @@ model Notification {
   type      NotificationType
   title     String
   message   String
-  data      Json?
+  data      Json? // Additional notification data
   isRead    Boolean          @default(false)
   readAt    DateTime?
   createdAt DateTime         @default(now())
@@ -242,6 +284,9 @@ model Notification {
   // Relations
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
+  // Access control
+  @@allow('read,update', accountId == auth().accountId || auth().isAdmin)
+  @@allow('create,delete', auth().isAdmin)
   @@map("notifications")
 }
 
@@ -255,13 +300,17 @@ model NFTOwnership {
   blockchain      String    @default("solana")
   verified        Boolean   @default(false)
   lastVerified    DateTime?
-  metadata        Json?
+  metadata        Json? // NFT metadata
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   // Relations
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
+  // Access control - public read, owner update
+  @@allow('read', true)
+  @@allow('create,update', accountId == auth().accountId || auth().isAdmin)
+  @@allow('delete', auth().isAdmin)
   @@unique([nftId, accountId])
   @@index([walletAddress])
   @@index([contractAddress, tokenId])
@@ -285,6 +334,9 @@ model Lore {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
+  // Access control - public read if public, admin create/update
+  @@allow('read', isPublic || auth().isAdmin)
+  @@allow('create,update,delete', auth().isAdmin)
   @@index([nftId])
   @@index([claimed])
   @@map("lore")
@@ -296,11 +348,13 @@ model Pipeline {
   description String?
   type        PipelineType
   status      PipelineStatus @default(INACTIVE)
-  config      Json
-  metadata    Json?
+  config      Json // Pipeline configuration
+  metadata    Json? // Additional metadata
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
+  // Access control - admin only
+  @@allow('all', auth().isAdmin)
   @@map("pipelines")
 }
 
@@ -316,11 +370,14 @@ model PublicVideo {
   views         Int      @default(0)
   likes         Int      @default(0)
   featured      Boolean  @default(false)
-  tags          String[]
-  metadata      Json?
+  tags          String[] // Array of tags
+  metadata      Json? // Additional metadata
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  // Access control - public read, admin write
+  @@allow('read', true)
+  @@allow('create,update,delete', auth().isAdmin)
   @@index([featured])
   @@index([views])
   @@index([createdAt])
@@ -333,7 +390,7 @@ model PublicVideo {
 
 model GameAgent {
   id             String    @id @default(auto()) @map("_id") @db.ObjectId
-  accountId      String    @unique @db.ObjectId
+  accountId      String    @db.ObjectId
   codename       String?
   rank           AgentRank @default(OBSERVER)
   timelinePoints Int       @default(0)
@@ -345,6 +402,11 @@ model GameAgent {
   proxim8s           GameProxim8[]
   missionDeployments TrainingMissionDeployment[]
 
+  // Access control
+  @@allow('read,update', accountId == auth().accountId || auth().isAdmin)
+  @@allow('create', auth().accountId != null)
+  @@allow('delete', auth().isAdmin)
+  @@unique([accountId])
   @@map("game_agents")
 }
 
@@ -365,6 +427,9 @@ model GameProxim8 {
   gameAgent          GameAgent                   @relation(fields: [gameAgentId], references: [id], onDelete: Cascade)
   missionDeployments TrainingMissionDeployment[]
 
+  // Access control - same as game agent
+  @@allow('read,create,update', gameAgent.accountId == auth().accountId || auth().isAdmin)
+  @@allow('delete', auth().isAdmin)
   @@unique([gameAgentId, nftId])
   @@map("game_proxim8s")
 }
@@ -378,12 +443,12 @@ model TrainingMissionDeployment {
   approach         MissionApproach
   deployedAt       DateTime         @default(now())
   completesAt      DateTime
-  duration         Int
+  duration         Int // Duration in milliseconds
   status           DeploymentStatus @default(ACTIVE)
   currentPhase     Int              @default(0)
   finalSuccessRate Float
-  phaseOutcomes    Json
-  result           Json?
+  phaseOutcomes    Json // Array of phase outcomes
+  result           Json? // Mission result
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
@@ -391,6 +456,10 @@ model TrainingMissionDeployment {
   gameAgent   GameAgent   @relation(fields: [gameAgentId], references: [id], onDelete: Cascade)
   gameProxim8 GameProxim8 @relation(fields: [gameProxim8Id], references: [id], onDelete: Cascade)
 
+  // Access control
+  @@allow('read,update', gameAgent.accountId == auth().accountId || auth().isAdmin)
+  @@allow('create', gameAgent.accountId == auth().accountId || auth().isAdmin)
+  @@allow('delete', auth().isAdmin)
   @@index([gameAgentId])
   @@index([status])
   @@index([missionId])
@@ -405,6 +474,8 @@ model UserStats {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@allow('read', true) // Public stats
+  @@allow('create,update,delete', auth().isAdmin)
   @@map("user_stats")
 }
 
@@ -415,6 +486,8 @@ model NFT {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@allow('read', true)
+  @@allow('create,update,delete', auth().isAdmin)
   @@map("nfts")
 }
 
@@ -426,6 +499,8 @@ model TrainingMission {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@allow('read', (status == 'available' && isActive) || auth().isAdmin)
+  @@allow('create,update,delete', auth().isAdmin)
   @@map("training_missions")
 }
 

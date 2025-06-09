@@ -1,47 +1,580 @@
-import "./prisma/schema.prisma"
+// ZenStack schema - extends Prisma with access control policies
 
-// Account - users can only access their own account
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./src/generated/prisma"
+}
+
+plugin enhancer {
+  provider = '@core/enhancer'
+  generatePermissionChecker = true
+}
+
+plugin hooks {
+  provider = '@zenstackhq/tanstack-query'
+  target = 'react'
+  output = '../proxim8-portal/src/lib/hooks'
+  version = 'v5'
+}
+
+// ====================================
+// CORE SERVER ENTITIES WITH POLICIES
+// ====================================
+
 model Account {
-    @@allow('read,update', id == auth().accountId || auth().isAdmin == true)
-    @@allow('create,delete', auth().isAdmin == true)
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  walletAddress String   @unique
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations to core entities
+  profiles     Profile[]
+  fingerprints Fingerprint[]
+  agents       Agent[]
+
+  // Relations to Proxim8 entities
+  videos        Video[]
+  notifications Notification[]
+  nftOwnerships NFTOwnership[]
+  proxim8User   Proxim8User?
+
+  // Relations to Game entities
+  gameAgent GameAgent?
+
+  // Access control - Using auth as a function that returns the current user context
+  @@allow('read,update', auth() != null && (auth().accountId == id || auth().isAdmin))
+  @@allow('create,delete', auth() != null && auth().isAdmin)
+  @@map("accounts")
 }
 
-// Profile - public/private visibility
 model Profile {
-    @@allow('read', isPublic == true || accountId == auth().accountId || auth().isAdmin == true)
-    @@allow('create', auth().accountId != null)
-    @@allow('update,delete', accountId == auth().accountId || auth().isAdmin == true)
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  accountId   String   @db.ObjectId
+  username    String   @unique
+  bio         String?
+  avatar      String?
+  isPublic    Boolean  @default(true)
+  socialLinks Json? // { twitter?: string, discord?: string, etc }
+  preferences Json? // User preferences object
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  account        Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  visits         Visit[]
+  impressions    Impression[]
+  socialProfiles SocialProfile[]
+
+  // Access control
+  @@allow('read', isPublic || (auth() != null && (accountId == auth().accountId || auth().isAdmin)))
+  @@allow('create', auth() != null && auth().accountId != null)
+  @@allow('update,delete', auth() != null && (accountId == auth().accountId || auth().isAdmin))
+  @@map("profiles")
 }
 
-// Agent - owned by accounts
+model Fingerprint {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  accountId   String?  @db.ObjectId
+  fingerprint String   @unique
+  roles       String[] // Array of role names
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  account Account? @relation(fields: [accountId], references: [id])
+  visits  Visit[]
+
+  // Access control
+  @@allow('read', auth() != null && (accountId == auth().accountId || auth().fingerprintId == id || auth().isAdmin))
+  @@allow('create', true) // Anyone can create fingerprint
+  @@allow('update', auth() != null && (accountId == auth().accountId || auth().isAdmin))
+  @@allow('delete', auth() != null && auth().isAdmin)
+  @@map("fingerprints")
+}
+
 model Agent {
-    @@allow('read', id == auth().agentId || accountId == auth().accountId || auth().isAdmin == true)
-    @@allow('create', auth().accountId != null)
-    @@allow('update', accountId == auth().accountId || auth().isAdmin == true)
-    @@allow('delete', auth().isAdmin == true)
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  accountId   String   @db.ObjectId
+  name        String
+  description String?
+  avatar      String?
+  isActive    Boolean  @default(true)
+  config      Json? // Agent configuration
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  account   Account     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  knowledge Knowledge[]
+  missions  Mission[]
+
+  // Access control
+  @@allow('read', auth() != null && (id == auth().agentId || accountId == auth().accountId || auth().isAdmin))
+  @@allow('create', auth() != null && auth().accountId != null)
+  @@allow('update', auth() != null && (accountId == auth().accountId || auth().isAdmin))
+  @@allow('delete', auth() != null && auth().isAdmin)
+  @@map("agents")
 }
 
-// Notification - recipient only
-model Notification {
-    @@allow('read,update', recipientId == auth().accountId || auth().isAdmin == true)
-    @@allow('create,delete', auth().isAdmin == true)
+model Visit {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  profileId     String?  @db.ObjectId
+  fingerprintId String   @db.ObjectId
+  path          String
+  userAgent     String?
+  ipAddress     String?
+  referrer      String?
+  duration      Int? // Visit duration in milliseconds
+  createdAt     DateTime @default(now())
+
+  // Relations
+  profile     Profile?    @relation(fields: [profileId], references: [id])
+  fingerprint Fingerprint @relation(fields: [fingerprintId], references: [id])
+
+  // Access control - visits are write-only for users, readable by admins
+  @@allow('create', auth() != null && auth().fingerprintId != null)
+  @@allow('read,update,delete', auth() != null && auth().isAdmin)
+  @@map("visits")
 }
 
-// Video - public/private with creator access
+model Impression {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  profileId String   @db.ObjectId
+  type      String // Type of impression (view, click, etc)
+  context   Json? // Additional context data
+  createdAt DateTime @default(now())
+
+  // Relations
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  // Access control
+  @@allow('create', auth() != null && auth().fingerprintId != null)
+  @@allow('read', auth() != null && (profile.accountId == auth().accountId || auth().isAdmin))
+  @@allow('update,delete', auth() != null && auth().isAdmin)
+  @@map("impressions")
+}
+
+model SocialProfile {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  profileId String   @db.ObjectId
+  platform  String // twitter, discord, github, etc
+  username  String
+  url       String?
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  // Access control - same as profile
+  @@allow('read', profile.isPublic || (auth() != null && (profile.accountId == auth().accountId || auth().isAdmin)))
+  @@allow('create,update,delete', auth() != null && (profile.accountId == auth().accountId || auth().isAdmin))
+  @@unique([profileId, platform])
+  @@map("social_profiles")
+}
+
+model Knowledge {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  agentId   String   @db.ObjectId
+  title     String
+  content   String
+  type      String // document, url, text, etc
+  source    String? // Source of the knowledge
+  metadata  Json? // Additional metadata
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  // Access control - knowledge belongs to agent owner
+  @@allow('read,create,update,delete', auth() != null && (agent.accountId == auth().accountId || auth().isAdmin))
+  @@map("knowledge")
+}
+
+model Mission {
+  id          String        @id @default(auto()) @map("_id") @db.ObjectId
+  agentId     String        @db.ObjectId
+  title       String
+  description String
+  status      MissionStatus @default(PENDING)
+  priority    Int           @default(1)
+  dueDate     DateTime?
+  completedAt DateTime?
+  result      Json? // Mission result data
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  // Access control - missions belong to agent owner
+  @@allow('read,create,update,delete', auth() != null && (agent.accountId == auth().accountId || auth().isAdmin))
+  @@map("missions")
+}
+
+// ====================================
+// PROXIM8 ENTITIES WITH POLICIES
+// ====================================
+
+model Proxim8User {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  accountId   String   @unique @db.ObjectId
+  username    String   @unique
+  email       String?
+  bio         String?
+  avatar      String?
+  isPublic    Boolean  @default(true)
+  isAdmin     Boolean  @default(false)
+  socialLinks Json? // { twitter?: string, discord?: string, etc }
+  preferences Json? // User preferences
+  stats       Json? // User statistics
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  // Access control
+  @@allow('read', isPublic || (auth() != null && (accountId == auth().accountId || auth().isAdmin)))
+  @@allow('create', auth() != null && auth().accountId != null && accountId == auth().accountId)
+  @@allow('update,delete', auth() != null && (accountId == auth().accountId || auth().isAdmin))
+  @@map("proxim8_users")
+}
+
 model Video {
-    @@allow('read', visibility == 'public' || creatorId == auth().accountId || auth().isAdmin == true)
-    @@allow('create', auth().accountId != null)
-    @@allow('update,delete', creatorId == auth().accountId || auth().isAdmin == true)
+  id           String      @id @default(auto()) @map("_id") @db.ObjectId
+  accountId    String      @db.ObjectId
+  nftId        String
+  jobId        String      @unique
+  status       VideoStatus @default(PENDING)
+  title        String?
+  description  String?
+  videoUrl     String?
+  thumbnailUrl String?
+  duration     Int? // Video duration in seconds
+  fileSize     Int? // File size in bytes
+  resolution   String? // Video resolution (e.g., "1920x1080")
+  isPublic     Boolean     @default(false)
+  metadata     Json? // Additional metadata
+  errorMessage String? // Error message if failed
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  // Relations
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  // Access control
+  @@allow('read', isPublic || (auth() != null && (accountId == auth().accountId || auth().isAdmin)))
+  @@allow('create', auth() != null && auth().accountId != null)
+  @@allow('update,delete', auth() != null && (accountId == auth().accountId || auth().isAdmin))
+  @@map("videos")
 }
 
-// TrainingMission - public read for available missions
-model TrainingMission {
-    @@allow('read', (status == 'available' && isActive == true) || auth().isAdmin == true)
-    @@allow('create,update,delete', auth().isAdmin == true)
+model Notification {
+  id        String           @id @default(auto()) @map("_id") @db.ObjectId
+  accountId String           @db.ObjectId
+  type      NotificationType
+  title     String
+  message   String
+  data      Json? // Additional notification data
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  // Relations
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  // Access control
+  @@allow('read,update', auth() != null && (accountId == auth().accountId || auth().isAdmin))
+  @@allow('create,delete', auth() != null && auth().isAdmin)
+  @@map("notifications")
 }
 
-// NFT - public read only
+model NFTOwnership {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  nftId           String
+  accountId       String    @db.ObjectId
+  walletAddress   String
+  contractAddress String
+  tokenId         String
+  blockchain      String    @default("solana")
+  verified        Boolean   @default(false)
+  lastVerified    DateTime?
+  metadata        Json? // NFT metadata
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  // Access control - public read, owner update
+  @@allow('read', true)
+  @@allow('create,update', auth() != null && (accountId == auth().accountId || auth().isAdmin))
+  @@allow('delete', auth() != null && auth().isAdmin)
+  @@unique([nftId, accountId])
+  @@index([walletAddress])
+  @@index([contractAddress, tokenId])
+  @@map("nft_ownership")
+}
+
+model Lore {
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  nftId      String
+  title      String
+  content    String
+  background String
+  traits     Json?
+  claimed    Boolean   @default(false)
+  claimedBy  String?
+  claimedAt  DateTime?
+  category   String?
+  tags       String[]
+  isPublic   Boolean   @default(true)
+  metadata   Json?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  // Access control - public read if public, admin create/update
+  @@allow('read', isPublic || (auth() != null && auth().isAdmin))
+  @@allow('create,update,delete', auth() != null && auth().isAdmin)
+  @@index([nftId])
+  @@index([claimed])
+  @@map("lore")
+}
+
+model Pipeline {
+  id          String         @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String?
+  type        PipelineType
+  status      PipelineStatus @default(INACTIVE)
+  config      Json // Pipeline configuration
+  metadata    Json? // Additional metadata
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  // Access control - admin only
+  @@allow('all', auth() != null && auth().isAdmin)
+  @@map("pipelines")
+}
+
+model PublicVideo {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  videoId       String   @unique @db.ObjectId
+  title         String
+  description   String?
+  thumbnailUrl  String?
+  videoUrl      String
+  nftId         String
+  walletAddress String
+  views         Int      @default(0)
+  likes         Int      @default(0)
+  featured      Boolean  @default(false)
+  tags          String[] // Array of tags
+  metadata      Json? // Additional metadata
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Access control - public read, admin write
+  @@allow('read', true)
+  @@allow('create,update,delete', auth() != null && auth().isAdmin)
+  @@index([featured])
+  @@index([views])
+  @@index([createdAt])
+  @@map("public_videos")
+}
+
+// ====================================
+// TRAINING/MISSION GAME ENTITIES
+// ====================================
+
+model GameAgent {
+  id             String    @id @default(auto()) @map("_id") @db.ObjectId
+  accountId      String    @unique @db.ObjectId
+  codename       String?
+  rank           AgentRank @default(OBSERVER)
+  timelinePoints Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Relations
+  account            Account                     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  proxim8s           GameProxim8[]
+  missionDeployments TrainingMissionDeployment[]
+
+  // Access control
+  @@allow('read,update', auth() != null && (accountId == auth().accountId || auth().isAdmin))
+  @@allow('create', auth() != null && auth().accountId != null)
+  @@allow('delete', auth() != null && auth().isAdmin)
+  @@map("game_agents")
+}
+
+model GameProxim8 {
+  id            String             @id @default(auto()) @map("_id") @db.ObjectId
+  gameAgentId   String             @db.ObjectId
+  nftId         String
+  name          String
+  personality   Proxim8Personality
+  level         Int                @default(1)
+  experience    Int                @default(0)
+  isDeployed    Boolean            @default(false)
+  lastMissionAt DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  // Relations
+  gameAgent          GameAgent                   @relation(fields: [gameAgentId], references: [id], onDelete: Cascade)
+  missionDeployments TrainingMissionDeployment[]
+
+  // Access control - same as game agent
+  @@allow('read,create,update', auth() != null && (gameAgent.accountId == auth().accountId || auth().isAdmin))
+  @@allow('delete', auth() != null && auth().isAdmin)
+  @@unique([gameAgentId, nftId])
+  @@map("game_proxim8s")
+}
+
+model TrainingMissionDeployment {
+  id               String           @id @default(auto()) @map("_id") @db.ObjectId
+  deploymentId     String           @unique
+  missionId        String
+  gameAgentId      String           @db.ObjectId
+  gameProxim8Id    String           @db.ObjectId
+  approach         MissionApproach
+  deployedAt       DateTime         @default(now())
+  completesAt      DateTime
+  duration         Int // Duration in milliseconds
+  status           DeploymentStatus @default(ACTIVE)
+  currentPhase     Int              @default(0)
+  finalSuccessRate Float
+  phaseOutcomes    Json // Array of phase outcomes
+  result           Json? // Mission result
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  // Relations
+  gameAgent   GameAgent   @relation(fields: [gameAgentId], references: [id], onDelete: Cascade)
+  gameProxim8 GameProxim8 @relation(fields: [gameProxim8Id], references: [id], onDelete: Cascade)
+
+  // Access control
+  @@allow('read,update', auth() != null && (gameAgent.accountId == auth().accountId || auth().isAdmin))
+  @@allow('create', auth() != null && (gameAgent.accountId == auth().accountId || auth().isAdmin))
+  @@allow('delete', auth() != null && auth().isAdmin)
+  @@index([gameAgentId])
+  @@index([status])
+  @@index([missionId])
+  @@map("training_mission_deployments")
+}
+
+// Simple models that were part of the migration
+model UserStats {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  profileId String   @unique @db.ObjectId
+  stats     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@allow('read', true) // Public stats
+  @@allow('create,update,delete', auth() != null && auth().isAdmin)
+  @@map("user_stats")
+}
+
 model NFT {
-    @@allow('read', true)
-    @@allow('create,update,delete', auth().isAdmin == true)
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  tokenId   String   @unique
+  metadata  Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@allow('read', true)
+  @@allow('create,update,delete', auth() != null && auth().isAdmin)
+  @@map("nfts")
+}
+
+model TrainingMission {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  title     String
+  status    String   @default("draft")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@allow('read', (status == 'available' && isActive) || (auth() != null && auth().isAdmin))
+  @@allow('create,update,delete', auth() != null && auth().isAdmin)
+  @@map("training_missions")
+}
+
+// ====================================
+// ENUMS
+// ====================================
+
+enum VideoStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum NotificationType {
+  VIDEO_COMPLETED
+  VIDEO_FAILED
+  SYSTEM_ANNOUNCEMENT
+  NFT_VERIFIED
+  PROFILE_UPDATE
+  MISSION_COMPLETED
+}
+
+enum MissionStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum PipelineType {
+  VIDEO_GENERATION
+  DATA_PROCESSING
+  NOTIFICATION
+  ANALYTICS
+}
+
+enum PipelineStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+  MAINTENANCE
+}
+
+enum AgentRank {
+  OBSERVER
+  FIELD_AGENT
+  SENIOR_AGENT
+  ARCHITECT
+}
+
+enum Proxim8Personality {
+  ANALYTICAL
+  AGGRESSIVE
+  DIPLOMATIC
+  ADAPTIVE
+}
+
+enum MissionApproach {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum DeploymentStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
 }

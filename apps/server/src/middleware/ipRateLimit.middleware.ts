@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { COLLECTIONS, DEFAULT_IP_RATE_LIMIT_CONFIG } from '../constants';
 import { RateLimitConfig } from '../schemas';
-import '../types/express'; // Load Request interface extension
+// Express types are loaded globally
 import { getDb } from '../utils/mongodb';
 
 const SUSPICIOUS_IP_THRESHOLD = 10; // Number of requests needed to establish an IP as trusted

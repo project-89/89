@@ -13,19 +13,20 @@ const prisma = new PrismaClient();
 export function getEnhancedPrisma(req: Request) {
   // Map Express auth context to ZenStack user object
   // ZenStack expects a flat object for auth()
-  const user = {
+  // Return null user if no auth context (for anonymous access)
+  const user = req.auth ? {
     // IDs for ownership checks
-    fingerprintId: req.auth?.fingerprint?.id,
-    accountId: req.auth?.account?.id,
-    agentId: req.auth?.agent?.id,
-    walletAddress: req.auth?.wallet?.address,
+    fingerprintId: req.auth.fingerprint?.id,
+    accountId: req.auth.account?.id,
+    agentId: req.auth.agent?.id,
+    walletAddress: req.auth.wallet?.address,
     
     // Admin flag
-    isAdmin: req.auth?.proxim8?.isAdmin || false,
+    isAdmin: req.auth.proxim8?.isAdmin || false,
     
     // Additional context if needed
-    isAgentActive: req.auth?.agent?.isActive || false,
-  };
+    isAgentActive: req.auth.agent?.isActive || false,
+  } : null;
 
   // Enhance Prisma client with access control
   return enhance(prisma, { user });
@@ -38,7 +39,7 @@ export function getSystemPrisma() {
   // Admin context bypasses all access control
   return enhance(prisma, { 
     user: { 
-      proxim8: { isAdmin: true } 
+      isAdmin: true 
     } 
   });
 }

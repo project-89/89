@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { ERROR_MESSAGES } from '../constants';
 import { getSigningKeyById } from '../services/keyRotation.service';
 import { isTokenBlacklisted } from '../services/tokenBlacklist.service';
-import '../types/express'; // Load Request interface extension first
+// Express types are loaded globally
 import { ApiError } from '../utils';
 
 // Enhanced JWT payload supporting both systems

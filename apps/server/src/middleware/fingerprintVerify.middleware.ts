@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 import { COLLECTIONS, ERROR_MESSAGES } from '../constants';
-import '../types/express'; // Load Request interface extension
+// Express types are loaded globally
 import { ApiError } from '../utils';
 import { getDb } from '../utils/mongodb';
 
