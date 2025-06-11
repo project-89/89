@@ -7,9 +7,9 @@ import { API_BASE_URL } from "@/config";
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const id = params.id;
+  const { id } = await params;
 
   if (!id) {
     return NextResponse.json(

@@ -16,7 +16,7 @@ export const revalidate = 3600;
 
 // Server component to fetch user's NFTs if authenticated
 async function getUserNFTs(): Promise<NFTMetadata[]> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const authToken = cookieStore.get("authToken")?.value;
 
   if (!authToken) {

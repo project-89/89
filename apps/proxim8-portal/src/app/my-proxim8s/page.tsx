@@ -13,31 +13,9 @@ export const metadata: Metadata = {
 export const revalidate = 3600;
 
 async function getUserNFTs(): Promise<NFTMetadata[]> {
-  const cookieStore = cookies();
-  const authToken = cookieStore.get("authToken")?.value;
-
-  if (!authToken) {
-    return [];
-  }
-
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/nfts/user`, {
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-      },
-      next: { revalidate: 60 },
-    });
-
-    if (!response.ok) {
-      console.error(`Error fetching user NFTs: ${response.status}`);
-      return [];
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error("Error fetching user NFTs:", error);
-    return [];
-  }
+  // For server-side rendering, we'll return empty array and let client-side fetch
+  // This avoids SSR authentication complexities and 404 errors
+  return [];
 }
 
 export default async function MyProxim8sPage() {

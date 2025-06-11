@@ -14,6 +14,7 @@ import {
   refreshNftMetadata,
   verifyNftOwnership,
 } from '../services/nft.service';
+import { getUserNftsFromHelius } from '../services/nft.service.helius';
 import { ApiError, sendError, sendSuccess } from '../utils';
 
 /**
@@ -58,7 +59,8 @@ export async function handleGetNftOwnership(req: Request, res: Response) {
  */
 export async function handleGetUserNfts(req: Request, res: Response) {
   try {
-    const nfts = await getUserNfts(req as unknown as GetUserNftsRequest);
+    // Use Helius API to fetch NFTs directly from the blockchain
+    const nfts = await getUserNftsFromHelius(req as unknown as GetUserNftsRequest);
     sendSuccess(res, nfts, 'User NFTs retrieved successfully');
   } catch (error) {
     const apiError = ApiError.from(error, 500, ERROR_MESSAGES.INTERNAL_ERROR);

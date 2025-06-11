@@ -7,11 +7,12 @@ import { getLore } from "@/services/lore";
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { loreId: string } }
+  { params }: { params: Promise<{ loreId: string }> }
 ) {
   try {
+    const { loreId } = await params;
     // Decode the ID from URL encoding
-    const decodedId = decodeURIComponent(params.loreId);
+    const decodedId = decodeURIComponent(loreId);
     const lore = await getLore(parseInt(decodedId));
 
     if (!lore) {

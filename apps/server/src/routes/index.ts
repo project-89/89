@@ -4,10 +4,12 @@ import { sendSuccess } from '../utils';
 import accountRoutes from './account.routes';
 import agentRoutes from './agent.routes';
 import agentInviteRoutes from './agentInvite.routes';
+import authRoutes from './auth.routes';
 import capabilityRoutes from './capability.routes';
 import fingerprintRoutes from './fingerprint.routes';
 import impressionRoutes from './impression.routes';
 import knowledgeRoutes from './knowledge.routes';
+import loreRoutes from './lore.routes';
 import missionRoutes from './mission.routes';
 import nftRoutes from './nft.routes';
 import notificationRoutes from './notification.routes';
@@ -35,6 +37,7 @@ router.get('/health', ...publicEndpoint(), (_, res) => {
 });
 
 // Mount domain-specific routers
+router.use('/auth', authRoutes); // /auth/*
 router.use(accountRoutes); // /accounts/*
 router.use(fingerprintRoutes); // /fingerprints/*
 router.use(visitRoutes); // /visits/*
@@ -49,6 +52,7 @@ router.use(onboardingRoutes); // /onboarding/*
 router.use(agentRoutes); // /agents/*
 router.use(agentInviteRoutes); // /agents/invites/*
 router.use(knowledgeRoutes); // /knowledge/*
+router.use(loreRoutes); // /lore/*
 router.use(missionRoutes); // /missions/*
 router.use(nftRoutes); // /nfts/*
 router.use(notificationRoutes); // /notifications/*

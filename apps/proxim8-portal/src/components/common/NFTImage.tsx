@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface NFTImageProps {
   src: string;
@@ -34,14 +34,35 @@ export default function NFTImage({
 }: NFTImageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const [currentSrc, setCurrentSrc] = useState(src);
+
+  // Reset state when src changes
+  useEffect(() => {
+    if (src !== currentSrc) {
+      setCurrentSrc(src);
+      setIsLoading(true);
+      setHasError(false);
+      setRetryCount(0);
+    }
+  }, [src, currentSrc]);
 
   const handleLoad = () => {
     setIsLoading(false);
   };
 
   const handleError = () => {
-    setIsLoading(false);
-    setHasError(true);
+    // Retry loading up to 3 times with a delay
+    if (retryCount < 3 && src) {
+      setTimeout(() => {
+        setRetryCount(prev => prev + 1);
+        // Force reload by adding a timestamp query parameter
+        setCurrentSrc(`${src}${src.includes('?') ? '&' : '?'}retry=${Date.now()}`);
+      }, 1000 * (retryCount + 1)); // Exponential backoff
+    } else {
+      setIsLoading(false);
+      setHasError(true);
+    }
   };
 
   return (
@@ -61,7 +82,7 @@ export default function NFTImage({
         </div>
       ) : (
         <Image
-          src={src}
+          src={currentSrc}
           alt={alt}
           width={width}
           height={height}

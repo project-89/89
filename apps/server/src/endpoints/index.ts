@@ -5,6 +5,7 @@ export * from './capability.endpoint';
 // export * from './fingerprint.endpoint'; // All CRUD - file migrated
 // export * from './impression.endpoint'; // All CRUD - file migrated
 export * from './knowledge.endpoint';
+export * from './lore.endpoint';
 export * from './mission.endpoint';
 export * from './nft.endpoint';
 export * from './notification.endpoint';

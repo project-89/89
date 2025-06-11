@@ -3,7 +3,7 @@ import {
   GameAgent,
   GameProxim8,
   Proxim8Personality,
-} from '../../generated/prisma';
+} from '@prisma/client';
 import { prisma } from '../prisma.service';
 
 export interface CreateGameAgentData {

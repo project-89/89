@@ -35,7 +35,7 @@ async function getPublicVideos(): Promise<Video[]> {
 
 // Server component to fetch user's videos if authenticated
 async function getUserVideos(): Promise<{ videos: Video[]; total: number }> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const authToken = cookieStore.get("authToken")?.value;
 
   if (!authToken) {

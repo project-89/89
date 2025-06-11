@@ -1,4 +1,4 @@
-import { DeploymentStatus } from '../../generated/prisma';
+import { DeploymentStatus } from '@prisma/client';
 import { prisma } from '../prisma.service';
 import { AIService } from './aiService';
 import { GameAgentService } from './gameAgentService';

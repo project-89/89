@@ -1,6 +1,6 @@
+import { VideoStatus } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import { ERROR_MESSAGES } from '../constants';
-import { VideoStatus } from '../generated/prisma';
 import {
   DeleteVideoRequest,
   GenerateVideoRequest,

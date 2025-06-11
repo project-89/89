@@ -1,0 +1,35 @@
+{
+  "name": "Project 89: Timeline Intervention",
+  "short_name": "Project 89",
+  "description": "Deploy Proxim8 AI agents from the future to disrupt Oneirocom's dystopian timeline. Train narrative intelligence, engineer probability fields, and shift reality toward the Green Loom future.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#00ff88",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon-16x16.png",
+      "sizes": "16x16",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["games", "entertainment", "productivity"],
+  "screenshots": []
+}

@@ -1,5 +1,5 @@
 import type React from "react";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Orbitron, Space_Mono } from "next/font/google";
 import "./globals.css";
 import { LayoutWrapper } from "./LayoutWrapper";
@@ -72,15 +72,6 @@ export const metadata: Metadata = {
     ],
   },
   manifest: "/site.webmanifest",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#00ff88" },
-    { media: "(prefers-color-scheme: dark)", color: "#00ff88" },
-  ],
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-  },
   openGraph: {
     type: "website",
     locale: "en_US",
@@ -117,6 +108,13 @@ export const metadata: Metadata = {
     },
   },
   category: "Gaming",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  themeColor: "#00ff88",
 };
 
 export default function RootLayout({

@@ -16,10 +16,11 @@ import { errorHandler } from './middleware/error.middleware';
 import router from './routes';
 import { setupScheduledTasks } from './scheduled';
 import { ApiError, initDatabases, sendError } from './utils';
+import { prismaService } from './services/prisma.service';
 
 // Load environment variables based on NODE_ENV first
-const envFile = process.env.NODE_ENV === 'test' ? '.env.test' : '.env';
-config({ path: path.resolve(__dirname, '../', envFile) });
+const envFile = process.env.NODE_ENV === 'test' ? '.env.test' : `.env.${process.env.NODE_ENV || 'development'}`;
+config({ path: path.resolve(__dirname, './env', envFile) });
 
 console.log('Environment loaded:', {
   NODE_ENV: process.env.NODE_ENV,
@@ -33,11 +34,22 @@ const isBrowserRequest = (req: express.Request): boolean => {
   return accept.includes('text/html') || accept.includes('*/*');
 };
 
-// Initialize MongoDB database
-initDatabases().catch((err) => {
-  console.error('Failed to initialize databases:', err);
-  process.exit(1);
-});
+// Initialize databases
+const initializeServices = async () => {
+  try {
+    // Initialize MongoDB
+    await initDatabases();
+    
+    // Initialize Prisma
+    await prismaService.connect();
+    console.log('Prisma connected successfully');
+  } catch (err) {
+    console.error('Failed to initialize services:', err);
+    process.exit(1);
+  }
+};
+
+initializeServices();
 
 // Create Express app
 const app = express();

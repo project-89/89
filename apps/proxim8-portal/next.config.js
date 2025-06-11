@@ -17,6 +17,10 @@ const nextConfig = {
       "raw.githubusercontent.com",
       "lh3.googleusercontent.com",
       "i.ibb.co",
+      "ipfs.io",
+      "gateway.pinit.io",
+      "gateway.pinata.cloud",
+      "cloudflare-ipfs.com",
     ],
     // Optimize image loading
     dangerouslyAllowSVG: true,

@@ -5,8 +5,11 @@ import { ERROR_MESSAGES } from '../constants';
 import { ApiError } from '../utils';
 
 interface JWTPayload {
-  accountId: string;
+  id: string; // Change from accountId to id to match auth routes
+  accountId?: string; // Make optional for backwards compatibility
   walletAddress: string;
+  roleId?: string;
+  isAdmin?: boolean;
   iat?: number;
   exp?: number;
 }
@@ -37,8 +40,12 @@ export const validateAuthToken = async (
       const decodedToken = jwt.verify(token, jwtSecret) as JWTPayload;
 
       // Extract account info from token claims
-      const { accountId, walletAddress } = decodedToken;
-      if (!accountId || !walletAddress) {
+      const { id, accountId, walletAddress, roleId, isAdmin } = decodedToken;
+      
+      // Use id field from token (new format) or accountId (old format)
+      const actualAccountId = id || accountId;
+      
+      if (!actualAccountId || !walletAddress) {
         throw new ApiError(401, ERROR_MESSAGES.INVALID_TOKEN_FORMAT);
       }
 
@@ -46,7 +53,13 @@ export const validateAuthToken = async (
       req.auth = {
         ...(req.auth || {}),
         account: {
-          id: accountId,
+          id: actualAccountId,
+        },
+        wallet: {
+          address: walletAddress,
+        },
+        proxim8: {
+          isAdmin: isAdmin || false,
         },
       };
 

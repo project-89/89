@@ -42,15 +42,13 @@ services:
 
   mongo:
     image: mongo:7
+    command: mongod --replSet rs0 --bind_ip_all
     ports:
       - "27019:27017"
     volumes:
       - mongo-data:/data/db
-      - ./scripts/mongo-init:/docker-entrypoint-initdb.d
     environment:
       - MONGO_INITDB_DATABASE=project89_dev
-      - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=dev-password
     networks:
       - project89-network
     restart: unless-stopped

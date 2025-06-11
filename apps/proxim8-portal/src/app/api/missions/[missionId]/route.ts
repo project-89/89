@@ -10,8 +10,9 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { missionId: string } }
+  { params }: { params: Promise<{ missionId: string }> }
 ) {
+  const { missionId } = await params;
   // Get the auth token from cookies
   const authToken = request.cookies.get("authToken")?.value;
 
@@ -29,8 +30,8 @@ export async function GET(
     
     // Build URL with optional type parameter
     const url = type 
-      ? `${API_BASE_URL}/missions/${params.missionId}?type=${type}`
-      : `${API_BASE_URL}/missions/${params.missionId}`;
+      ? `${API_BASE_URL}/missions/${missionId}?type=${type}`
+      : `${API_BASE_URL}/missions/${missionId}`;
 
     // Forward the request to the Express server
     const response = await fetch(url, {

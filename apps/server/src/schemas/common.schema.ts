@@ -11,9 +11,17 @@ export const VisitIdSchema = z.string().min(1, ERROR_MESSAGES.NOT_FOUND);
 export const ImpressionIdSchema = z.string().min(1, ERROR_MESSAGES.NOT_FOUND);
 
 // Common data schemas
-export const WalletAddressSchema = z.string().regex(/^0x[a-fA-F0-9]{40}$/, {
-  message: ERROR_MESSAGES.INVALID_INPUT,
-});
+// Solana wallet address schema
+export const WalletAddressSchema = z.string().refine(
+  (val) => {
+    // Solana address: base58 encoded, typically 32-44 characters
+    const solanaPattern = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+    return solanaPattern.test(val);
+  },
+  {
+    message: `${ERROR_MESSAGES.INVALID_INPUT}: Wallet address must be a valid Solana address`,
+  }
+);
 
 export const UnixTimestampSchema = z.number().int().positive();
 

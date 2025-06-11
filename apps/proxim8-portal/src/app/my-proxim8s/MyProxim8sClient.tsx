@@ -19,7 +19,13 @@ export default function MyProxim8sClient({
   const router = useRouter();
   const { track } = useAnalytics();
   const [displayedNfts, setDisplayedNfts] = useState<NFTMetadata[]>([]);
-  const [backgroundNumber] = useState(() => Math.floor(Math.random() * 19) + 1);
+  // Use a deterministic background number based on the initial NFTs to avoid hydration mismatch
+  const backgroundNumber = useMemo(() => {
+    // Use the length of initial NFTs to deterministically select a background
+    // This ensures the same value on server and client
+    const seed = initialUserNFTs.length || 0;
+    return (seed % 19) + 1;
+  }, [initialUserNFTs]);
   const { setUserNfts } = useNftStore();
 
   const {

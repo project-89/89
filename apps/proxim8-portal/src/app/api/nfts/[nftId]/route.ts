@@ -7,13 +7,14 @@ import { getNFT } from "@/services/nft";
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { nftId: string } }
+  { params }: { params: Promise<{ nftId: string }> }
 ) {
   try {
-    console.log(`[API] GET /api/nfts/${params.nftId} - Raw ID received`);
+    const { nftId } = await params;
+    console.log(`[API] GET /api/nfts/${nftId} - Raw ID received`);
 
     // Decode the ID from URL encoding
-    const decodedId = decodeURIComponent(params.nftId);
+    const decodedId = decodeURIComponent(nftId);
     console.log(`[API] Decoded NFT ID: ${decodedId}`);
 
     console.log(`[API] Calling server getNFT with ID: ${decodedId}`);
@@ -28,7 +29,7 @@ export async function GET(
     console.log(`[API] Successfully fetched NFT: ${nft.name}`);
     return NextResponse.json(nft);
   } catch (error) {
-    console.error(`[API] Error fetching NFT for ID ${params.nftId}:`, error);
+    console.error(`[API] Error fetching NFT for ID ${nftId}:`, error);
     return NextResponse.json({ error: "Failed to fetch NFT" }, { status: 500 });
   }
 }

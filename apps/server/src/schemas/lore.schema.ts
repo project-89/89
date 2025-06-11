@@ -109,6 +109,14 @@ export const GetClaimedLoreRequestSchema = z.object({
   body: z.object({}).optional(),
 });
 
+export const GetBatchAvailableLoreRequestSchema = z.object({
+  params: z.object({}).optional(),
+  query: z.object({}).optional(),
+  body: z.object({
+    nftIds: z.array(ProximNftIdSchema).min(1).max(100),
+  }),
+});
+
 // Response Schemas
 export const LoreResponseSchema = LoreSchema.extend({
   createdAt: z.number(),
@@ -187,6 +195,7 @@ export type GetUnclaimedLoreRequest = z.infer<
   typeof GetUnclaimedLoreRequestSchema
 >;
 export type GetClaimedLoreRequest = z.infer<typeof GetClaimedLoreRequestSchema>;
+export type GetBatchAvailableLoreRequest = z.infer<typeof GetBatchAvailableLoreRequestSchema>;
 export type LoreListResponse = z.infer<typeof LoreListResponseSchema>;
 export type LoreStatsResponse = z.infer<typeof LoreStatsResponseSchema>;
 export type ClaimLoreResponse = z.infer<typeof ClaimLoreResponseSchema>;

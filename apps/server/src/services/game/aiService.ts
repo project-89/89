@@ -1,11 +1,11 @@
 import { google } from '@ai-sdk/google';
 import { generateText } from 'ai';
-import { TrainingMissionData } from '../../data/trainingMissions';
 import {
   GameProxim8,
   MissionApproach,
   Proxim8Personality,
-} from '../../generated/prisma';
+} from '../../../generated/prisma';
+import { TrainingMissionData } from '../../data/trainingMissions';
 import { PhaseOutcome } from './missionService';
 
 export interface NarrativeContext {

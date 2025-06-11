@@ -1,5 +1,5 @@
+import { NotificationType } from '@prisma/client';
 import { ERROR_MESSAGES } from '../constants';
-import { NotificationType } from '../generated/prisma';
 import {
   BulkCreateNotificationsRequest,
   CreateNotificationRequest,

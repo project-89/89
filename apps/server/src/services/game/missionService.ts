@@ -1,13 +1,13 @@
 import {
-  TRAINING_MISSIONS,
-  TrainingMissionData,
-} from '../../data/trainingMissions';
-import {
   DeploymentStatus,
   GameProxim8,
   MissionApproach,
   TrainingMissionDeployment,
-} from '../../generated/prisma';
+} from '@prisma/client';
+import {
+  TRAINING_MISSIONS,
+  TrainingMissionData,
+} from '../../data/trainingMissions';
 import { prisma } from '../prisma.service';
 
 export interface MissionCompatibility {

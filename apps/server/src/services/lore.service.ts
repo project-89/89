@@ -4,6 +4,7 @@ import {
   ClaimLoreResponse,
   CreateLoreRequest,
   DeleteLoreRequest,
+  GetBatchAvailableLoreRequest,
   GetClaimedLoreRequest,
   GetLoreByNftRequest,
   GetLoreListRequest,
@@ -451,6 +452,56 @@ export const getLoreStats = async (
     };
   } catch (error) {
     console.error(`${LOG_PREFIX} Error getting lore stats:`, error);
+    throw ApiError.from(error, 500, ERROR_MESSAGES.INTERNAL_ERROR);
+  }
+};
+
+/**
+ * Get batch available lore for multiple NFTs
+ * Reduces API calls from n individual requests to 1 batch request
+ */
+export const getBatchAvailableLore = async (
+  request: GetBatchAvailableLoreRequest
+): Promise<Record<string, { hasUnclaimedLore: boolean; unclaimedCount: number }>> => {
+  try {
+    console.log(`${LOG_PREFIX} Getting batch available lore`);
+
+    const { nftIds } = request.body;
+
+    if (!Array.isArray(nftIds) || nftIds.length === 0) {
+      throw new ApiError(400, 'nftIds array is required');
+    }
+
+    // Limit batch size to prevent abuse
+    if (nftIds.length > 100) {
+      throw new ApiError(400, 'Maximum 100 NFT IDs per batch request');
+    }
+
+    // Get unclaimed lore counts for all NFT IDs
+    const loreCountPromises = nftIds.map(async (nftId) => {
+      const count = await prisma.lore.count({
+        where: {
+          nftId,
+          claimed: false,
+        },
+      });
+      return { nftId, count };
+    });
+
+    const loreCounts = await Promise.all(loreCountPromises);
+
+    // Build response object
+    const response: Record<string, { hasUnclaimedLore: boolean; unclaimedCount: number }> = {};
+    loreCounts.forEach(({ nftId, count }) => {
+      response[nftId] = {
+        hasUnclaimedLore: count > 0,
+        unclaimedCount: count,
+      };
+    });
+
+    return response;
+  } catch (error) {
+    console.error(`${LOG_PREFIX} Error getting batch available lore:`, error);
     throw ApiError.from(error, 500, ERROR_MESSAGES.INTERNAL_ERROR);
   }
 };

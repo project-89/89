@@ -33,7 +33,7 @@ async function getSearchResults(query: string): Promise<SearchResult[]> {
     return [];
   }
 
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const authToken = cookieStore.get("authToken")?.value;
 
   try {

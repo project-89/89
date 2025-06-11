@@ -116,6 +116,7 @@ export default function Proxim8Card({
           {/* Image section */}
           <div className="relative aspect-square overflow-hidden bg-black">
             <NFTImage
+              key={image || `nft-image-${tokenId || id}`}
               src={image}
               alt={name || "Proxim8 NFT"}
               width={400}
